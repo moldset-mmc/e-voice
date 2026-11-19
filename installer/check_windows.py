@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from uuid import uuid4
 import wave
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +40,9 @@ class WindowsJob:
         require_hosted_windows()
         import win32job
         self.api = win32job
-        self.handle = win32job.CreateJobObject(None, None)
+        # pywin32 requires a string, even though the Win32 API permits NULL.
+        # Session-local UUID names avoid reusing any other process's job object.
+        self.handle = win32job.CreateJobObject(None, f'Local\\EVoice-QA-{uuid4().hex}')
         try:
             info = win32job.QueryInformationJobObject(self.handle, win32job.JobObjectExtendedLimitInformation)
             info['BasicLimitInformation']['LimitFlags'] |= win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE

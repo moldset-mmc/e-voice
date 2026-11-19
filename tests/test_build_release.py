@@ -254,8 +254,11 @@ class WindowsHarnessTests(unittest.TestCase):
         api = Mock(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE=0x2000)
         api.QueryInformationJobObject.return_value = {'BasicLimitInformation': {'LimitFlags': 0}}
         handle = api.CreateJobObject.return_value
-        with patch.object(check_windows, 'require_hosted_windows'), patch.dict('sys.modules', win32job=api):
+        with patch.object(check_windows, 'require_hosted_windows'), \
+                patch.dict('sys.modules', win32job=api), \
+                patch.object(check_windows, 'uuid4', side_effect=[Mock(hex='a' * 32), Mock(hex='b' * 32)]):
             job = check_windows.WindowsJob()
+            api.CreateJobObject.assert_called_once_with(None, 'Local\\EVoice-QA-' + 'a' * 32)
             limits = api.SetInformationJobObject.call_args.args[2]
             self.assertEqual(limits['BasicLimitInformation']['LimitFlags'], 0x2000)
             job.close()
@@ -264,6 +267,8 @@ class WindowsHarnessTests(unittest.TestCase):
             api.SetInformationJobObject.side_effect = OSError('job limit failed')
             with self.assertRaisesRegex(OSError, 'job limit failed'):
                 check_windows.WindowsJob()
+            api.CreateJobObject.assert_called_with(None, 'Local\\EVoice-QA-' + 'b' * 32)
+            self.assertEqual(api.CreateJobObject.call_count, 2)
             handle.Close.assert_called_once_with()
 
     def test_empty_job_wait_is_bounded(self):
@@ -274,6 +279,23 @@ class WindowsHarnessTests(unittest.TestCase):
                 job.wait_empty(timeout=10)
         job.active_processes.return_value = 0
         job.wait_empty()
+
+
+class HostedWindowsJobSmokeTests(unittest.TestCase):
+    def test_native_empty_job_create_query_limits_and_close(self):
+        # Run before packaging on hosted Windows, never use native APIs locally.
+        try:
+            check_windows.require_hosted_windows()
+        except RuntimeError as error:
+            self.skipTest(str(error))
+        job = check_windows.WindowsJob()
+        self.addCleanup(job.close)
+        self.assertEqual(job.active_processes(), 0)
+        info = job.api.QueryInformationJobObject(job.handle, job.api.JobObjectExtendedLimitInformation)
+        self.assertTrue(info['BasicLimitInformation']['LimitFlags'] & job.api.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+        job.wait_empty(timeout=0)
+        job.close()
+        self.assertIsNone(job.handle)
 
 
 class WorkflowContractTests(unittest.TestCase):

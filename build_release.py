@@ -242,7 +242,8 @@ def main():
         if not (APP / relative).is_file():
             raise RuntimeError('Missing from build: ' + relative)
     stage_assets(APP)
-    subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File',
+    powershell = shutil.which('pwsh.exe') or 'powershell.exe'
+    subprocess.run([powershell, '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File',
                     str(ROOT / 'installer/stage_runtime.ps1'), '-AppDirectory', str(APP)], check=True)
     subprocess.run([str(Path(compiler).resolve()), f'/DAppVersion={version}',
                     str(ROOT / 'installer' / 'EVoice.iss')], cwd=ROOT, check=True)

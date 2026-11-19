@@ -1,6 +1,9 @@
 # Build time only. Ship unmodified x64 VC runtime files from Microsoft's REDIST tree.
 param([Parameter(Mandatory)][string]$AppDirectory)
 $ErrorActionPreference = 'Stop'
+# The build may have been launched by a different edition of PowerShell.
+# Load the signing cmdlet belonging to this executable.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1')
 $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ } | Select-Object -Unique
 $versions = foreach ($base in $roots) {
     Get-ChildItem -Path "$base\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*" -Directory -ErrorAction SilentlyContinue |

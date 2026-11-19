@@ -6,7 +6,7 @@
 
 | Ваш компьютер | Пакет с моделью |
 | --- | --- |
-| Windows 10/11 x64 | [Установщик EXE](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Setup-x64.exe) |
+| Windows 10/11 x64, также Windows 11 ARM через встроенную эмуляцию | [Установщик EXE](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Setup-x64.exe) |
 | Mac с процессором Apple M1 или новее | [Установщик PKG для Apple Silicon](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-macOS-arm64.pkg) |
 | Mac с процессором Intel | [Установщик PKG для Intel](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-macOS-x86_64.pkg) |
 | Linux x86-64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Linux-amd64.deb) · [Переносимый архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Linux-amd64.tar.gz) |

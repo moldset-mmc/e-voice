@@ -3,10 +3,21 @@ from array import array
 from pathlib import Path
 import math
 import threading
+import sys
 import wave
 from model_files import verify_model
 
 RATE = 16000
+
+
+def segment_end(samples, cursor, rate, limit):
+    end = min(cursor + limit, len(samples))
+    if end < len(samples):
+        window = max(1, rate // 5)
+        candidates = range(max(cursor + rate, end - 5 * rate), end - window + 1, window)
+        cut = min(candidates, key=lambda i: sum(v * v for v in samples[i:i + window]))
+        return cut + window // 2
+    return end
 
 
 def segments(samples, rate=RATE, seconds=20):
@@ -14,14 +25,29 @@ def segments(samples, rate=RATE, seconds=20):
     limit = int(rate * seconds)
     cursor = 0
     while cursor < len(samples):
-        end = min(cursor + limit, len(samples))
-        if end < len(samples):
-            window = max(1, rate // 5)
-            candidates = range(max(cursor + rate, end - 5 * rate), end - window + 1, window)
-            cut = min(candidates, key=lambda i: sum(v * v for v in samples[i:i + window]))
-            end = cut + window // 2
+        end = segment_end(samples, cursor, rate, limit)
         yield samples[cursor:end]
         cursor = end
+
+
+def wav_segments(source, rate):
+    """Look ahead by one sample to make exactly the same cuts as microphone audio."""
+    remaining, limit = source.getnframes(), rate * 20
+    pending = array('f')
+    while remaining or pending:
+        count = min(remaining, limit + 1 - len(pending))
+        if count:
+            pcm = array('h')
+            pcm.frombytes(source.readframes(count))
+            if len(pcm) != count:
+                raise ValueError('Неполный WAV-файл.')
+            if sys.byteorder == 'big':
+                pcm.byteswap()
+            pending.extend(value / 32768 for value in pcm)
+            remaining -= count
+        end = segment_end(pending, 0, rate, limit)
+        yield pending[:end]
+        del pending[:end]
 
 
 class SpeechEngine:
@@ -48,9 +74,12 @@ class SpeechEngine:
             samples = array('f', samples)
         if len(samples) < rate // 5:
             return ''
+        return self._decode(segments(samples, rate), rate, cancel)
+
+    def _decode(self, parts, rate, cancel):
         padding = array('f', [0]) * (rate // 5)
         texts = []
-        for part in segments(samples, rate):
+        for part in parts:
             if cancel is not None and cancel.is_set():
                 break
             if max(part) < 0.001 and min(part) > -0.001:
@@ -73,10 +102,9 @@ class SpeechEngine:
                 raise ValueError('Нужен моно WAV PCM16 с частотой от 8000 до 192000 Гц.')
             if source.getnframes() > rate * 600:
                 raise ValueError('Максимальная длительность одной диктовки — 10 минут.')
-            pcm = array('h')
-            pcm.frombytes(source.readframes(source.getnframes()))
-            samples = array('f', (value / 32768 for value in pcm))
-        return self.transcribe(samples, cancel, rate)
+            if source.getnframes() < rate // 5:
+                return ''
+            return self._decode(wav_segments(source, rate), rate, cancel)
 
 
 class Recorder:

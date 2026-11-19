@@ -85,8 +85,8 @@ class Desktop:
             for i, dev in enumerate(sd.query_devices()):
                 if dev['max_input_channels']:
                     self.devices[f"{dev['name']} · {i}"] = i
-        except (ImportError, OSError, RuntimeError):
-            pass
+        except Exception as exc:
+            self.status.set('Список микрофонов недоступен. ' + str(exc))
         self.device = tk.StringVar(value=self.config.get('microphone', MIC))
         if self.device.get() not in self.devices:
             self.device.set(MIC)
@@ -280,6 +280,11 @@ class Desktop:
         if current and not own:
             self.last_target = current
         self.target = self.last_target
+        if own and not self.test_audio:
+            try:
+                self.io.restore_own_focus(self.target)
+            except Exception:
+                self.target = None
         if self.state == 'ready':
             try:
                 if not self.test_audio:

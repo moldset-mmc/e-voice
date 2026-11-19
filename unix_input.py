@@ -64,21 +64,27 @@ class DesktopInput:
         except Exception:
             return None, False
 
-    def paste(self, text, target):
-        current, own = self.target()
-        if self.wayland or not target or (current != target and not own):
-            return False
+    def restore_own_focus(self, target):
+        if not target or not self.target()[1]:
+            return
         if sys.platform == 'darwin':
             from AppKit import NSRunningApplication, NSApplicationActivateIgnoringOtherApps
+            app = NSRunningApplication.runningApplicationWithProcessIdentifier_(target)
+            if app:
+                app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
+        elif self.display:
+            from Xlib import X
+            window = self.display.create_resource_object('window', target)
+            window.set_input_focus(X.RevertToParent, X.CurrentTime)
+            self.display.sync()
+
+    def paste(self, text, target):
+        if self.wayland or not target or self.target()[0] != target:
+            return False
+        if sys.platform == 'darwin':
             from ApplicationServices import AXIsProcessTrusted
             import Quartz as q
             if not AXIsProcessTrusted():
-                return False
-            if own:
-                app = NSRunningApplication.runningApplicationWithProcessIdentifier_(target)
-                if not app or not app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps):
-                    return False
-            if self.target()[0] != target:
                 return False
             # Post one paste chord after publishing the UTF-8 result to the macOS pasteboard.
             self.copy(text)
@@ -89,12 +95,6 @@ class DesktopInput:
         else:
             from Xlib import X, XK
             from Xlib.ext import xtest
-            if own:
-                window = self.display.create_resource_object('window', target)
-                window.set_input_focus(X.RevertToParent, X.CurrentTime)
-                self.display.sync()
-            if self.target()[0] != target:
-                return False
             self.copy(text)
             ctrl, v = [self.display.keysym_to_keycode(XK.string_to_keysym(k)) for k in ('Control_L', 'v')]
             for kind, key in ((X.KeyPress, ctrl), (X.KeyPress, v), (X.KeyRelease, v), (X.KeyRelease, ctrl)):

@@ -86,6 +86,7 @@ def build_unix(version):
                         '--package-path', str(build), str(DIST / f'E-Voice-macOS-{architecture}.pkg')], check=True)
     else:
         arch = {'x86_64': 'amd64', 'aarch64': 'arm64'}[architecture]
+        linux_library_notices()
         with tempfile.TemporaryDirectory(dir=build, prefix='deb-') as temp:
             build_deb(Path(temp), arch, version)
         archive = DIST / f'E-Voice-Linux-{arch}.tar.gz'
@@ -107,6 +108,32 @@ def build_deb(root, arch, version):
     link.symlink_to('/opt/e-voice/EVoice')
     subprocess.run(['dpkg-deb', '--root-owner-group', '-Zxz', '-z4', '--build', str(root),
                     str(DIST / f'E-Voice-Linux-{arch}.deb')], check=True)
+
+
+def linux_library_notices():
+    """Keep the distro's copyright files alongside bundled system libraries."""
+    system = Path('/usr/lib') / sysconfig.get_config_var('MULTIARCH')
+    destination = APP / '_internal/licenses/system'
+    destination.mkdir(parents=True, exist_ok=True)
+    packages = set()
+    for name in {p.name for p in (APP / '_internal').rglob('*.so*')}:
+        library = system / name
+        if not library.is_file():
+            continue
+        candidates = [str(library.resolve()), str(library)]
+        candidates += [path.removeprefix('/usr') for path in candidates if path.startswith('/usr/lib/')]
+        owners = subprocess.run(['dpkg-query', '-S', *candidates], capture_output=True, text=True)
+        for line in owners.stdout.splitlines():
+            packages.add(line.partition(': ')[0])
+    records = []
+    for package in sorted(packages):
+        name = package.split(':')[0]
+        copyright_file = Path('/usr/share/doc') / name / 'copyright'
+        if copyright_file.is_file():
+            shutil.copy2(copyright_file, destination / (name + '.txt'))
+            record = subprocess.check_output(['dpkg-query', '-W', '-f=${source:Package}\t${source:Version}', package], text=True)
+            records.append(name + '\t' + record)
+    (destination / 'packages.tsv').write_text('\n'.join(records) + '\n', encoding='utf-8')
 
 
 def main():

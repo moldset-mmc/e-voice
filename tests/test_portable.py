@@ -1,6 +1,8 @@
 from array import array
 from pathlib import Path
 import queue
+import io
+import wave
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -8,7 +10,7 @@ from unittest.mock import Mock, patch
 from desktop_entry import model_directory
 from model_files import MODEL_NAMES, model_entries
 from preferences import read_settings, write_settings
-from speech_engine import RATE, Recorder, SpeechEngine
+from speech_engine import RATE, Recorder, SpeechEngine, segments, wav_segments
 from unix_input import shortcut_expression
 
 
@@ -57,6 +59,20 @@ class PortableTests(unittest.TestCase):
         self.assertEqual(engine.transcribe(array('f', [.1]*24000).tobytes(), rate=48000), 'Готово')
         rate, audio = stream.accept_waveform.call_args.args
         self.assertEqual((rate, len(audio)), (48000, 24000+19200))
+
+    def test_long_wav_uses_the_same_quiet_cuts_with_bounded_reads(self):
+        rate = 8000
+        samples = array('h', (i % 319 for i in range(rate*46)))
+        buffer = io.BytesIO()
+        with wave.open(buffer, 'wb') as dest:
+            dest.setparams((1, 2, rate, 0, 'NONE', ''))
+            dest.writeframes(samples.tobytes())
+        buffer.seek(0)
+        with wave.open(buffer, 'rb') as source:
+            with patch.object(source, 'readframes', wraps=source.readframes) as reads:
+                chunks = list(wav_segments(source, rate))
+                self.assertLessEqual(max(call.args[0] for call in reads.call_args_list), rate*20+1)
+        self.assertEqual(chunks, list(segments(array('f', (s/32768 for s in samples)), rate)))
 
     def test_portable_shortcut_handles_single_keys_and_chords(self):
         self.assertEqual(shortcut_expression('Ctrl + Alt + Space'), '<ctrl>+<alt>+<space>')

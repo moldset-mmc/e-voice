@@ -30,7 +30,7 @@ def include_licenses(destination):
         for folder in (tcl_dir, tcl_dir.parent / ('tk' + str(tkinter.TkVersion))):
             for terms in folder.glob('license.terms'):
                 shutil.copy2(terms, destination / (terms.parent.name + '-license.txt'))
-    packages = ['pillow', 'sounddevice', 'six', 'cffi', 'sherpa-onnx', 'sherpa-onnx-core']
+    packages = ['pillow', 'sounddevice', 'six', 'cffi', 'sherpa-onnx', 'sherpa-onnx-core', 'pyinstaller']
     if sys.platform == 'win32':
         packages.extend(('pystray', 'pywin32'))
     else:
@@ -116,6 +116,7 @@ def linux_library_notices():
     system = Path('/usr/lib') / sysconfig.get_config_var('MULTIARCH')
     destination = APP / '_internal/licenses/system'
     destination.mkdir(parents=True, exist_ok=True)
+    shutil.copytree('/usr/share/common-licenses', destination / 'common-licenses', dirs_exist_ok=True)
     packages = set()
     for name in {p.name for p in (APP / '_internal').rglob('*.so*')}:
         library = system / name
@@ -172,13 +173,15 @@ def collect_release_artifacts(source, destination, version, tag):
                 raise ValueError(f'Duplicate QA report for {asset}: {report.name}')
             reports[report.name] = report
         required = {'qa-arm64.json'} if asset == 'Windows-arm64' else {'qa-offline.json', 'qa-interaction.json'}
+        if asset != 'Windows-arm64':
+            required.add('qa-licenses.json')
         if asset == 'Windows-x64':
             required.add('qa-windows-lifecycle.json')
         if not required.issubset(reports):
             raise ValueError(f'{asset}: missing QA reports {sorted(required - reports.keys())}')
         for name, path in reports.items():
             data = json.loads(path.read_text(encoding='utf-8'))
-            if name in ('qa-interaction.json', 'qa-windows-lifecycle.json', 'qa-arm64.json'):
+            if name in ('qa-interaction.json', 'qa-windows-lifecycle.json', 'qa-arm64.json', 'qa-licenses.json'):
                 if data.get('passed') is not True:
                     raise ValueError(f'{asset}: failed QA report {name}')
             elif name in ('qa-offline.json', 'qa-speech.json', 'qa-speech-48k.json'):
@@ -239,6 +242,8 @@ def main():
         if not (APP / relative).is_file():
             raise RuntimeError('Missing from build: ' + relative)
     stage_assets(APP)
+    subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File',
+                    str(ROOT / 'installer/stage_runtime.ps1'), '-AppDirectory', str(APP)], check=True)
     subprocess.run([str(Path(compiler).resolve()), f'/DAppVersion={version}',
                     str(ROOT / 'installer' / 'EVoice.iss')], cwd=ROOT, check=True)
     print(DIST / 'E-Voice-Setup-x64.exe')

@@ -22,6 +22,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 WizardStyle=modern
+LicenseFile=windows-runtime-terms.txt
 SetupIconFile=..\assets\evoice.ico
 UninstallDisplayIcon={app}\EVoice.exe
 OutputDir=..\dist
@@ -37,6 +38,7 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
+Source: "windows-runtime-terms.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\EVoice\EVoice.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\EVoice\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\EVoice\models\gigaam-v3\*"; DestDir: "{app}\models\gigaam-v3"; Flags: ignoreversion
@@ -49,3 +51,16 @@ Name: "{group}\E Voice"; Filename: "{app}\EVoice.exe"
 
 [Run]
 Filename: "{app}\EVoice.exe"; Flags: nowait skipifsilent
+
+[InstallDelete]
+Type: files; Name: "{app}\_internal\_sounddevice_data\portaudio-binaries\libportaudio64bit-asio.dll"
+Type: files; Name: "{app}\_internal\ucrtbase.dll"
+Type: files; Name: "{app}\_internal\api-ms-win-*.dll"
+
+[Code]
+function InitializeSetup(): Boolean;
+begin
+  Result := not WizardSilent or (ExpandConstant('{param:ACCEPTRUNTIMETERMS|0}') = '1');
+  if not Result then
+    Log('Unattended installation requires /ACCEPTRUNTIMETERMS=1 after reviewing the Microsoft runtime terms.');
+end;

@@ -24,15 +24,17 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-# sounddevice's hook also collects PortAudio builds for other operating systems
-# and CPU types. Preserve both Windows x64 drivers, including the ASIO variant.
-def windows_audio(entries):
-    return [entry for entry in entries
-            if '_sounddevice_data/portaudio-binaries/' not in entry[0].replace('\\', '/')
-            or entry[0].endswith(('libportaudio64bit.dll', 'libportaudio64bit-asio.dll'))]
+# Windows 10+ supplies UCRT. Stage the two signed VC runtime DLLs from
+# Visual Studio REDIST after collection. Only the non-ASIO audio driver is used.
+def windows_payload(entry):
+    path = entry[0].replace('\\', '/').lower()
+    name = path.rsplit('/', 1)[-1]
+    if name.startswith(('api-ms-win-', 'vcruntime140')) or name == 'ucrtbase.dll':
+        return False
+    return '_sounddevice_data/portaudio-binaries/' not in path or name == 'libportaudio64bit.dll'
 
-a.datas = windows_audio(a.datas)
-a.binaries = windows_audio(a.binaries)
+a.datas = list(filter(windows_payload, a.datas))
+a.binaries = list(filter(windows_payload, a.binaries))
 pyz = PYZ(a.pure)
 
 exe = EXE(

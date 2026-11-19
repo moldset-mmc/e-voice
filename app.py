@@ -21,6 +21,8 @@ import traceback
 from tkinter import ttk
 
 import pystray
+if getattr(sys, 'frozen', False):
+    os.environ.pop('SD_ENABLE_ASIO', None)  # Packaged Windows builds use the standard PortAudio driver.
 import sounddevice as sd
 import win32api
 import win32con

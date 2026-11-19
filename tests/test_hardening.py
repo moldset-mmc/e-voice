@@ -2,6 +2,7 @@
 and the throttled level meter. Platform-neutral — no Win32 imports."""
 import queue
 import sys
+import threading
 import unittest
 from pathlib import Path
 
@@ -27,11 +28,13 @@ class TimeoutPolicyTests(unittest.TestCase):
 
     def test_timeout_kills_process_and_raises(self):
         class Pipe:
+            def __init__(self): self.closed = threading.Event()
             def send(self, *_): pass
             def send_bytes(self, _): pass
-            def poll(self, _timeout=None): return False
-            def recv(self): raise AssertionError('unreachable')
-            def close(self): pass
+            def recv(self):
+                self.closed.wait(2)
+                raise EOFError
+            def close(self): self.closed.set()
 
         class Proc:
             alive = True

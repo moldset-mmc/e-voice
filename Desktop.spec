@@ -15,6 +15,7 @@ binaries = [(str(p), 'sherpa_onnx/lib') for p in lib.glob(extension) if p.is_fil
 backend = '_darwin' if mac else '_xorg'
 hidden = ['pynput.keyboard.' + backend, 'pynput.mouse.' + backend, 'PIL._tkinter_finder', 'PIL.PngImagePlugin']
 if not mac:
+    datas.append((str(stage / 'e-voice.png'), '.'))
     system_lib = Path('/usr/lib') / sysconfig.get_config_var('MULTIARCH')
     binaries.append((str(system_lib / 'libportaudio.so.2'), '.'))
     hidden += collect_submodules('Xlib.ext') + ['Xlib.support.unix_connect', 'Xlib.keysymdef.latin1']

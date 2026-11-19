@@ -23,10 +23,12 @@ def include_licenses(destination):
     destination.mkdir(parents=True, exist_ok=True)
     python_terms = [Path(sys.base_prefix) / 'LICENSE.txt', Path(sysconfig.get_path('stdlib')) / 'LICENSE.txt']
     shutil.copy2(next(p for p in python_terms if p.is_file()), destination / 'Python.txt')
-    tcl_dir = Path(tkinter.Tcl().eval('info library'))
-    for folder in (tcl_dir, tcl_dir.parent / ('tk' + str(tkinter.TkVersion))):
-        for terms in folder.glob('license.terms'):
-            shutil.copy2(terms, destination / (terms.parent.name + '-license.txt'))
+    library = tkinter.Tcl().eval('info library')
+    if not library.startswith('//zipfs:'):
+        tcl_dir = Path(library)
+        for folder in (tcl_dir, tcl_dir.parent / ('tk' + str(tkinter.TkVersion))):
+            for terms in folder.glob('license.terms'):
+                shutil.copy2(terms, destination / (terms.parent.name + '-license.txt'))
     packages = ['pillow', 'sounddevice', 'six', 'cffi', 'sherpa-onnx', 'sherpa-onnx-core']
     if sys.platform == 'win32':
         packages.extend(('pystray', 'pywin32'))
@@ -58,6 +60,10 @@ def stage_assets(destination):
     include_licenses(destination / 'licenses')
     for name in ('THIRD_PARTY.md', 'LICENSE'):
         shutil.copy2(ROOT / name, destination)
+    if sys.platform == 'linux':
+        from PIL import Image
+        with Image.open(ROOT / 'assets/evoice.ico') as original:
+            original.convert('RGBA').save(destination / 'e-voice.png')
 
 
 def build_unix(version):
@@ -93,11 +99,9 @@ def build_deb(root, arch, version):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text((ROOT / source).read_text().replace('@VERSION@', version).replace('@ARCH@', arch))
-    from PIL import Image
     icon = root / 'usr/share/icons/hicolor/64x64/apps/e-voice.png'
     icon.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(ROOT / 'assets/evoice.ico') as original:
-        original.convert('RGBA').save(icon)
+    shutil.copy2(APP / '_internal/e-voice.png', icon)
     link = root / 'usr/bin/e-voice'
     link.parent.mkdir(parents=True, exist_ok=True)
     link.symlink_to('/opt/e-voice/EVoice')
@@ -130,14 +134,16 @@ def main():
                 break
     if not compiler or not Path(compiler).is_file():
         parser.error('Передай путь к ISCC.exe через --iscc')
-    tkinter.Tcl().eval('info patchlevel')
+    embedded_tcl = tkinter.Tcl().eval('info library').startswith('//zipfs:')
     prepare(args.offline)
     subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', 'EVoice.spec'],
                    cwd=ROOT, check=True)
-    for relative in ('EVoice.exe', '_internal/_tkinter.pyd', '_internal/_tk_data/tk.tcl',
-                     '_internal/_tcl_data/init.tcl', '_internal/assets/evoice.ico',
+    required = ['EVoice.exe', '_internal/_tkinter.pyd', '_internal/assets/evoice.ico',
                      '_internal/sherpa_onnx/lib/onnxruntime.dll',
-                     '_internal/_sounddevice_data/portaudio-binaries/libportaudio64bit.dll'):
+                     '_internal/_sounddevice_data/portaudio-binaries/libportaudio64bit.dll']
+    if not embedded_tcl:
+        required.extend(('_internal/_tk_data/tk.tcl', '_internal/_tcl_data/init.tcl'))
+    for relative in required:
         if not (APP / relative).is_file():
             raise RuntimeError('Missing from build: ' + relative)
     stage_assets(APP)

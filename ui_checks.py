@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import win32api
 import win32con
 import win32gui
+import win32process
 from tkinter import ttk
 from dpi_awareness import current_awareness
 from glass_theme import GLASS_ALPHA, MENU_ALPHA, SETTINGS_ALPHA
@@ -64,6 +65,7 @@ def run_checks(root, app, result_path):
                 win32gui.GetWindowRect(glass.front) == win32gui.GetWindowRect(glass.hwnd))
 
     def exercise_appearance():
+        measurements['idle_working_set_mib'] = round(win32process.GetProcessMemoryInfo(win32api.GetCurrentProcess())['WorkingSetSize'] / 2**20, 1)
         checks['model_absent_before_first_dictation'] = app.session.process is None
         app.floating.visible(False)
         root.after(200, guard(exercise_reveal))
@@ -240,6 +242,12 @@ def run_checks(root, app, result_path):
         root.after(100, guard(lambda: wait_ready(check_result)))
 
     def check_result():
+        handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ, False, app.session.process.pid)
+        try:
+            measurements['warm_working_set_mib'] = round(sum(win32process.GetProcessMemoryInfo(p)['WorkingSetSize']
+                for p in (win32api.GetCurrentProcess(), handle)) / 2**20, 1)
+        finally:
+            handle.Close()
         checks['dictation_still_works'] = bool(app.last_text)
         checks['finished_button_stays_visible'] = not win32gui.IsIconic(app.floating.hwnd)
         checks['finished_button_does_not_move'] = win32gui.GetWindowRect(app.floating.hwnd) == app._test_reveal_position
@@ -331,6 +339,7 @@ def run_checks(root, app, result_path):
         app.tray.visible = False
         win32gui.ShowWindow(app.floating.hwnd, win32con.SW_HIDE)
         def released():
+            measurements['released_working_set_mib'] = round(win32process.GetProcessMemoryInfo(win32api.GetCurrentProcess())['WorkingSetSize'] / 2**20, 1)
             checks['idle_releases_model_and_keeps_button'] = app.session.process is None and bool(win32gui.IsWindow(app.floating.hwnd))
             benchmark_short_phrase()
         wait_for(lambda: app.session.process is None, released, 'Idle model was not released')

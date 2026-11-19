@@ -1,7 +1,7 @@
 # Install the public Windows release for the current user. No elevation or Python required.
 param([string]$FromDirectory)
 $ErrorActionPreference = 'Stop'
-$release = 'https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0'
+$release = 'https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1'
 $name = 'E-Voice-Setup-x64.exe'
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'E Voice requires 64-bit Windows.' }
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('e-voice-' + [guid]::NewGuid().ToString('N'))

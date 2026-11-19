@@ -6,11 +6,11 @@
 
 | Ваш компьютер | Пакет с моделью |
 | --- | --- |
-| Windows 10/11 x64, также Windows 11 ARM через встроенную эмуляцию | [Установщик EXE](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Setup-x64.exe) |
-| Mac с процессором Apple M1 или новее | [Установщик PKG для Apple Silicon](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-macOS-arm64.pkg) |
-| Mac с процессором Intel | [Установщик PKG для Intel](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-macOS-x86_64.pkg) |
-| Linux x86-64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Linux-amd64.deb) · [Переносимый архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Linux-amd64.tar.gz) |
-| Linux ARM64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Linux-arm64.deb) · [Переносимый архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Linux-arm64.tar.gz) |
+| Windows 10/11 x64, также Windows 11 ARM через встроенную эмуляцию | [Установщик EXE](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-Setup-x64.exe) |
+| Mac с процессором Apple M1 или новее | [Установщик PKG для Apple Silicon](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-macOS-arm64.pkg) |
+| Mac с процессором Intel | [Установщик PKG для Intel](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-macOS-x86_64.pkg) |
+| Linux x86-64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-Linux-amd64.deb) · [Переносимый архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-Linux-amd64.tar.gz) |
+| Linux ARM64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-Linux-arm64.deb) · [Переносимый архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-Linux-arm64.tar.gz) |
 
 Откройте пакет на нужном компьютере. Эти же файлы можно перенести на флешке. Windows добавляет E Voice в меню «Пуск», macOS устанавливает его в папку «Программы» текущего пользователя, DEB добавляет значок в меню приложений Linux. При первом использовании разрешите системе доступ к микрофону. Установщики выпуска распространяются без коммерческой цифровой подписи. В macOS для открытия скачанного PKG может понадобиться подтверждение в **Системные настройки → Конфиденциальность и безопасность**. [Проверка приложений в macOS](https://support.apple.com/102445)
 
@@ -19,16 +19,16 @@
 **Windows 10/11.** Выполните в командной строке Windows (cmd.exe), в папке для загрузки. Закройте ранее запущенный E Voice перед обновлением.
 
 ```bat
-curl.exe -fL https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/E-Voice-Setup-x64.exe -o E-Voice-Setup-x64.exe && E-Voice-Setup-x64.exe /SILENT
+curl.exe -fL https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/E-Voice-Setup-x64.exe -o E-Voice-Setup-x64.exe && E-Voice-Setup-x64.exe /SILENT
 ```
 
 **macOS или настольный Linux.** Скрипт подберёт пакет по процессору и проверит SHA-256. Для установки в домашнюю папку права администратора не требуются.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.0/installer/install.sh -o install-e-voice.sh && sh install-e-voice.sh
+curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.1/installer/install.sh -o install-e-voice.sh && sh install-e-voice.sh
 ```
 
-Для установки из локальной папки положите в неё пакет и файл контрольных сумм выпуска. Из копии репозитория выполните `./installer/install.ps1 -FromDirectory <папка>` в PowerShell или `sh installer/install.sh --from <папка>` на Mac и Linux. [Контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.0/SHA256SUMS.txt) · [Код установки](installer)
+Для установки из локальной папки положите в неё пакет и файл контрольных сумм выпуска. Из копии репозитория выполните `./installer/install.ps1 -FromDirectory <папка>` в PowerShell или `sh installer/install.sh --from <папка>` на Mac и Linux. [Контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.1/SHA256SUMS.txt) · [Код установки](installer)
 
 ## Управление
 

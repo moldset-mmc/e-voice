@@ -20,7 +20,7 @@ def include_licenses(destination):
     shutil.copy2(Path(sys.base_prefix) / 'LICENSE.txt', destination / 'Python.txt')
     for terms in (Path(sys.base_prefix) / 'tcl').glob('*/license.terms'):
         shutil.copy2(terms, destination / (terms.parent.name + '-license.txt'))
-    for dist in ('numpy', 'pillow', 'pystray', 'sounddevice', 'six', 'cffi', 'pywin32',
+    for dist in ('pillow', 'pystray', 'sounddevice', 'six', 'cffi', 'pywin32',
                  'sherpa-onnx', 'sherpa-onnx-core'):
         package = metadata.distribution(dist)
         for entry in package.files or ():
@@ -59,7 +59,9 @@ def main():
     subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', 'EVoice.spec'],
                    cwd=ROOT, check=True)
     for relative in ('EVoice.exe', '_internal/_tkinter.pyd', '_internal/_tk_data/tk.tcl',
-                     '_internal/_tcl_data/init.tcl', '_internal/assets/evoice.ico'):
+                     '_internal/_tcl_data/init.tcl', '_internal/assets/evoice.ico',
+                     '_internal/sherpa_onnx/lib/onnxruntime.dll',
+                     '_internal/_sounddevice_data/portaudio-binaries/libportaudio64bit.dll'):
         if not (APP / relative).is_file():
             raise RuntimeError('Missing from build: ' + relative)
     shutil.copytree(MODEL, APP / 'models' / MODEL.name, dirs_exist_ok=True,

@@ -3,12 +3,12 @@ from pathlib import Path
 import unittest
 import queue
 import ctypes
+from array import array
 import threading
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import numpy as np
-from speech_engine import segments, SpeechEngine, RATE
+from speech_engine import Recorder, segments, SpeechEngine, RATE
 from app import Application
 from windows_io import GlobalHotkey, INPUT, choose_target, hotkey_label, parse_hotkey, text_key_events
 from floating_control import CURSOR_GAP_DIP, HEIGHT, WIDTH, control_metrics, fit_to_work_area, placement_near_cursor
@@ -98,19 +98,19 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(fit_to_work_area((-1900, -100), (-1280, 0, 0, 984)), (-1280, 0))
 
     def test_long_audio_is_neither_dropped_nor_duplicated(self):
-        audio = np.arange(RATE * 63, dtype=np.float32) / 1e8
+        audio = array('f', (i / 1e8 for i in range(RATE * 63)))
         parts = list(segments(audio))
-        np.testing.assert_array_equal(np.concatenate(parts), audio)
+        self.assertEqual(b''.join(part.tobytes() for part in parts), audio.tobytes())
         self.assertTrue(all(0 < len(x) <= RATE * 20 for x in parts))
 
     def test_silence_and_tiny_recording_do_not_call_model(self):
         engine = SpeechEngine.__new__(SpeechEngine)
-        self.assertEqual(engine.transcribe(np.zeros(RATE)), '')
-        self.assertEqual(engine.transcribe(np.ones(100)), '')
+        self.assertEqual(engine.transcribe(array('f', [0]) * RATE), '')
+        self.assertEqual(engine.transcribe(array('f', [1]) * 100), '')
 
     def test_quiet_cut_is_preferred(self):
-        audio = np.ones(RATE * 30, dtype=np.float32) * 0.1
-        audio[RATE * 17:RATE * 18] = 0
+        audio = array('f', [0.1]) * (RATE * 30)
+        audio[RATE * 17:RATE * 18] = array('f', [0]) * RATE
         first = next(segments(audio))
         self.assertTrue(RATE * 17 <= len(first) <= RATE * 18)
 
@@ -118,7 +118,19 @@ class CoreTests(unittest.TestCase):
         engine = SpeechEngine.__new__(SpeechEngine)
         cancelled = threading.Event()
         cancelled.set()
-        self.assertEqual(engine.transcribe(np.ones(RATE), cancelled), '')
+        self.assertEqual(engine.transcribe(array('f', [1]) * RATE, cancelled), '')
+
+    def test_raw_microphone_preserves_samples_and_level(self):
+        events = queue.Queue()
+        recorder = Recorder(events)
+        samples = array('f', [-0.25, 0.25]) * 800
+        with patch('sounddevice.RawInputStream') as stream:
+            recorder.start()
+            callback = stream.call_args.kwargs['callback']
+            callback(memoryview(samples).cast('B'), len(samples), None, Mock(input_overflow=False))
+            self.assertEqual(events.get_nowait(), ('level', 0.25))
+            self.assertEqual(recorder.stop(), samples.tobytes())
+            stream.return_value.close.assert_called_once()
 
     def test_windows_input_has_native_64bit_layout(self):
         self.assertEqual(ctypes.sizeof(INPUT), 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)

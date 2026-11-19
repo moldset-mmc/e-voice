@@ -3,6 +3,8 @@ import json
 import threading
 import time
 import traceback
+import wave
+from array import array
 from types import SimpleNamespace
 
 import win32api
@@ -16,7 +18,7 @@ from glass_theme import GLASS_ALPHA, MENU_ALPHA, SETTINGS_ALPHA
 def run_checks(root, app, result_path):
     checks = {}
     measurements = {}
-    deadline = time.monotonic() + 35
+    deadline = time.monotonic() + 110
     # Test state stays in this process; never overwrite the user's preferences.
     app.save_settings = lambda: None
     app.autopaste.set(False)  # This test must never type into another application.
@@ -62,6 +64,7 @@ def run_checks(root, app, result_path):
                 win32gui.GetWindowRect(glass.front) == win32gui.GetWindowRect(glass.hwnd))
 
     def exercise_appearance():
+        checks['model_absent_before_first_dictation'] = app.session.process is None
         app.floating.visible(False)
         root.after(200, guard(exercise_reveal))
 
@@ -162,6 +165,7 @@ def run_checks(root, app, result_path):
         root.after(1200, guard(check_background_recording))
 
     def check_background_recording():
+        checks['model_loads_when_recording_begins'] = bool(app.session.process and app.session.process.is_alive())
         checks['record_button_stays_visible'] = app.state == 'recording' and not win32gui.IsIconic(app.floating.hwnd)
         checks['record_button_does_not_move'] = win32gui.GetWindowRect(app.floating.hwnd) == app._test_recording_position
         checks['drag_while_recording_moves_without_stopping'] = drag_microphone()
@@ -190,9 +194,13 @@ def run_checks(root, app, result_path):
         cursor = measurements['summon_cursor']
         action = win32gui.GetWindowRect(app.floating.button)
         gap = max(action[0] - cursor[0], cursor[0] - action[2], action[1] - cursor[1], cursor[1] - action[3], 0)
-        checks['action_is_close_to_cursor'] = gap <= 38 * app.floating.dpi / 96
         panel = win32gui.GetWindowRect(app.floating.hwnd)
         work = win32api.GetMonitorInfo(win32api.MonitorFromPoint(cursor, win32con.MONITOR_DEFAULTTONEAREST))['Work']
+        # The pointer may be on the taskbar, outside the usable desktop.
+        cx = min(max(cursor[0], work[0]), work[2]-1)
+        cy = min(max(cursor[1], work[1]), work[3]-1)
+        reachable_gap = max(action[0]-cx, cx-action[2], action[1]-cy, cy-action[3], 0)
+        checks['action_is_close_to_cursor'] = reachable_gap <= 38 * app.floating.dpi / 96
         expected_left = cursor[0] - work[0] >= (panel[2] - panel[0]) + round(16 * app.floating.dpi / 96)
         checks['panel_prefers_left_with_space'] = panel[2] <= cursor[0] if expected_left else panel[0] >= cursor[0]
         measurements.update(dpi=app.floating.dpi, cursor=cursor, action_rect=action,
@@ -308,6 +316,61 @@ def run_checks(root, app, result_path):
     def check_tray():
         checks['tray_menu_has_its_own_glass_backdrop'] = has_material(app.choices.motion)
         app.choices.window.event_generate('<Escape>')
-        wait_for(lambda: app.choices.window.state() == 'withdrawn', finish, 'Escape did not dismiss tray menu')
+        wait_for(lambda: app.choices.window.state() == 'withdrawn', check_release, 'Escape did not dismiss tray menu')
+
+    def check_release():
+        # The remaining checks use a synthetic microphone. Remove the test
+        # controls from the user's desktop while measuring the idle interval.
+        app.summon_enabled.set(False)
+        if app.mouse_gesture:
+            app.mouse_gesture.close()
+            app.mouse_gesture = None
+        if app.hotkey:
+            app.hotkey.close()
+            app.hotkey = None
+        app.tray.visible = False
+        win32gui.ShowWindow(app.floating.hwnd, win32con.SW_HIDE)
+        def released():
+            checks['idle_releases_model_and_keeps_button'] = app.session.process is None and bool(win32gui.IsWindow(app.floating.hwnd))
+            benchmark_short_phrase()
+        wait_for(lambda: app.session.process is None, released, 'Idle model was not released')
+
+    def benchmark_short_phrase():
+        # Use the normal microphone byte path, fed exclusively by the test WAV.
+        with wave.open(str(app.test_audio), 'rb') as source:
+            frames = array('h')
+            frames.frombytes(source.readframes(source.getframerate()))
+        audio = array('f', (v / 32768 for v in frames)).tobytes()
+        recorder = app.recorder
+        app.recorder = SimpleNamespace(start=lambda device: None, stop=lambda: audio, stream=None, overflow=False)
+        app.test_audio = None
+        original_finish = app.finish
+        trials = [('cold', 1000), ('warm', 1000)] * 3 + [('immediate', 0)]
+        timings = measurements['one_second_phrase'] = []
+        recognized = []
+        def run(index):
+            if index >= len(trials):
+                checks['cold_and_warm_recognize_same_short_pcm'] = bool(recognized[0]) and len(set(recognized)) == 1
+                app.finish = original_finish
+                app.recorder = recorder
+                finish()
+                return
+            kind, head_start = trials[index]
+            if kind != 'warm' and app.session.process:
+                app.release_idle_model()
+            checks['consecutive_recordings_reuse_model'] = checks.get('consecutive_recordings_reuse_model', True) and (
+                kind != 'warm' or bool(app.session.process and app.session.process.is_alive()))
+            app.toggle()
+            def stop():
+                start = time.perf_counter()
+                def received(text):
+                    original_finish(text)
+                    timings.append({'model': kind, 'stop_to_text_ms': round((time.perf_counter()-start)*1000)})
+                    recognized.append(text)
+                    root.after_idle(guard(lambda: run(index+1)))
+                app.finish = received
+                app.toggle()
+            root.after(head_start, guard(stop))
+        run(0)
 
     wait_ready(guard(exercise_appearance))

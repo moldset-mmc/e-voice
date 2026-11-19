@@ -25,6 +25,7 @@ set_owner = user32.SetWindowLongPtrW
 set_owner.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
 set_owner.restype = ctypes.c_ssize_t
 NO_REDIRECTION_BITMAP = 0x00200000
+CORNER_DIP = 22
 get_owner = user32.GetWindow
 get_owner.argtypes = [wintypes.HWND, wintypes.UINT]
 get_owner.restype = wintypes.HWND
@@ -143,10 +144,11 @@ class GlassBackdrop:
         bounds = (left, top, *size)
         width, height = size
         scale = max(1, self.window.winfo_fpixels('1i') / 96)
-        radius = max(6, round(15 * scale))
+        radius = max(6, round(CORNER_DIP * scale))
         reveal = 1 - (1 - self.progress) ** 3
-        inset = round((1 - reveal) * min(width * .12, 26 * scale))
-        clip = (inset, 0, width - inset + 1, max(2, math.ceil(height * reveal)) + 1)
+        inset = round((1 - reveal) * 5 * scale)
+        bottom = height - math.ceil((1 - reveal) * min(height * .15, 20 * scale))
+        clip = (inset, inset, width - inset + 1, max(2, bottom) + 1)
         if self.region != clip:
             _clip(self.hwnd, clip, radius)
             _clip(self.front, clip, radius)

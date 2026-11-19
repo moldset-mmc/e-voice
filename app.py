@@ -1,4 +1,8 @@
 """E Voice: explicit microphone toggle, offline Russian ASR, global paste."""
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
+
 import argparse
 import ctypes
 import faulthandler
@@ -29,6 +33,7 @@ from glass_theme import (ACCENT, BORDER, MENU_ALPHA, ON_DARK, SECONDARY, SETTING
 from mouse_gesture import MouseGesture
 from dpi_awareness import enable_dpi_awareness
 from choices import ChoicePopup
+from recognition_session import RecognitionSession
 
 BASE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('EVOICE_DATA_DIR') or (Path(os.environ.get('LOCALAPPDATA', BASE)) / 'E Voice'))
@@ -60,11 +65,14 @@ def enable_diagnostics():
 
 
 class Application:
-    def __init__(self, root, test_audio=None):
+    def __init__(self, root, test_audio=None, test_mode=False):
         self.root = root
+        self.test_mode = test_mode
         self.events = queue.Queue()
         self.recorder = Recorder(self.events)
-        self.engine = None
+        self.session = RecognitionSession(BASE / 'models' / 'gigaam-v3')
+        self.idle_release = None
+        self.model_idle_ms = 30_000
         self.state = 'loading'
         self.target = None
         self.last_target = None
@@ -79,12 +87,11 @@ class Application:
         self.ignore_icon_until = 0
         self.tray = None
         self.closing = False
-        self.cancel = threading.Event()
         self.worker = None
         self.test_audio = test_audio
         self.config_path = DATA_DIR / 'settings.json'
         try:
-            self.config = json.loads(self.config_path.read_text(encoding='utf-8'))
+            self.config = {} if test_mode else json.loads(self.config_path.read_text(encoding='utf-8'))
         except (OSError, ValueError):
             self.config = {}
         self.make_window()
@@ -101,8 +108,7 @@ class Application:
         except Exception as exc:
             self.status.set(str(exc))
         root.after(50, self.poll)
-        self.worker = threading.Thread(target=self.load_model, daemon=True)
-        self.worker.start()
+        self.ready('Готов к записи')
 
     def make_window(self):
         root = self.root
@@ -310,6 +316,8 @@ class Application:
         self.toggle_floating()
 
     def save_settings(self):
+        if self.test_mode:
+            return
         self.config.update(hotkey=self.key_var.get(), microphone=self.device_var.get(), autopaste=self.autopaste.get(),
                            show_float=self.show_float.get(), triple_click=self.summon_enabled.get(),
                            auto_hide_recording=self.auto_hide_recording.get())
@@ -400,11 +408,10 @@ class Application:
         self.tray.open_glass_menu = lambda point: self.events.put(('tray_menu', point))
         threading.Thread(target=self.tray.run, daemon=True).start()
 
-    def load_model(self):
-        try:
-            self.events.put(('engine', SpeechEngine(BASE / 'models' / 'gigaam-v3')))
-        except Exception as exc:
-            self.events.put(('error', 'Модель не загрузилась: ' + str(exc)))
+    def release_idle_model(self):
+        self.idle_release = None
+        if self.state == 'ready':
+            self.session.close()
 
     def poll(self):
         if self.closing:
@@ -415,10 +422,7 @@ class Application:
                 name, value = self.events.get_nowait()
             except queue.Empty:
                 break
-            if name == 'engine':
-                self.engine = value
-                self.ready('Готов к записи')
-            elif name == 'toggle':
+            if name == 'toggle':
                 self.toggle()
             elif name == 'hotkey' and value is self.hotkey:
                 if self.capturing_hotkey:
@@ -432,7 +436,7 @@ class Application:
             elif name == 'text':
                 self.finish(value)
             elif name == 'error':
-                self.ready(value) if self.engine else self.status.set(value)
+                self.ready(value)
             elif name == 'show':
                 self.show_settings()
             elif name == 'quick_menu':
@@ -469,6 +473,9 @@ class Application:
 
     def ready(self, message):
         self.state = 'ready'
+        if self.idle_release is not None:
+            self.root.after_cancel(self.idle_release)
+        self.idle_release = self.root.after(self.model_idle_ms, self.release_idle_model) if self.session.process else None
         self.level['value'] = 0
         self.button.configure(text='Начать запись', state='normal', style='Action.Glass.TButton')
         self.device_box.configure(state='normal')
@@ -481,7 +488,7 @@ class Application:
             self.tray.title = 'E Voice — готово'
 
     def toggle(self):
-        if self.state == 'ready' and self.engine:
+        if self.state == 'ready':
             current = foreground()
             self.target = choose_target(current, self.last_target, os.getpid())
             try:
@@ -489,6 +496,16 @@ class Application:
                     self.recorder.start(self.devices[self.device_var.get()])
             except Exception as exc:
                 self.status.set('Микрофон недоступен: ' + str(exc))
+                return
+            if self.idle_release is not None:
+                self.root.after_cancel(self.idle_release)
+                self.idle_release = None
+            try:
+                self.session.warm()
+            except Exception as exc:
+                if self.recorder.stream is not None:
+                    self.recorder.stop()
+                self.ready('Не удалось запустить распознавание: ' + str(exc))
                 return
             self.state = 'recording'
             self.button.configure(text='Стоп и вставить', style='Stop.Glass.TButton')
@@ -501,12 +518,12 @@ class Application:
             if self.auto_hide_recording.get():
                 generation = self.float_reveal
                 self.root.after(900, lambda: self.hide_recording_button(generation))
-            if current[1] == os.getpid() and self.target:
+            if not self.test_mode and current[1] == os.getpid() and self.target:
                 activate_target(self.target)
         elif self.state == 'recording':
             # Capture the destination again: the user may have moved the caret.
             self.target = choose_target(foreground(), self.last_target, os.getpid())
-            if self.target:
+            if self.target and not self.test_mode:
                 activate_target(self.target)
             try:
                 audio = self.recorder.stop() if not self.test_audio else None
@@ -522,7 +539,7 @@ class Application:
             self.floating.update('transcribing')
             def work():
                 try:
-                    text = self.engine.transcribe_file(self.test_audio, self.cancel) if self.test_audio else self.engine.transcribe(audio, self.cancel)
+                    text = self.session.transcribe(audio, self.test_audio)
                     if self.recorder.overflow:
                         self.events.put(('error', 'Во время записи были пропуски звука; проверь результат.'))
                     self.events.put(('text', text))
@@ -579,7 +596,7 @@ class Application:
         if self.closing:
             return
         self.closing = True
-        self.cancel.set()
+        self.session.close()
         if self.recorder.stream is not None:
             try:
                 self.recorder.stop()
@@ -683,7 +700,7 @@ def main():
     root = tk.Tk()
     root.withdraw()
     try:
-        application = Application(root, args.test_audio)
+        application = Application(root, args.test_audio, bool(args.ui_demo or args.interaction_test))
         if args.ui_demo:
             application.autopaste.set(False)
             application.save_settings = lambda: None

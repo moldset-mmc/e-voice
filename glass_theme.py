@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageOps, ImageTk
-from popup_glass import GlassBackdrop
+from popup_glass import CORNER_DIP, GlassBackdrop
 
 
 SURFACE = '#EFF4F6'
@@ -31,8 +31,8 @@ ON_RECORD = '#FFE2D8'
 GLASS_ALPHA = 255
 SETTINGS_ALPHA = 1.0
 MENU_ALPHA = 1.0
-POPUP_OPEN_MS = 200
-POPUP_CLOSE_MS = 125
+POPUP_OPEN_MS = 175
+POPUP_CLOSE_MS = 120
 
 
 def _glyph(draw, name, xy, size, ink):
@@ -113,7 +113,7 @@ def menu_rim(size, scale):
     width, height = size
     image = Image.new('RGB', size, SURFACE)
     unit = max(1, round(scale))
-    radius = round(15 * scale)
+    radius = round(CORNER_DIP * scale)
     mask = Image.new('L', size)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, width-1, height-1), radius=radius,
                                            outline=255, width=max(2, round(2.3 * scale)))
@@ -167,7 +167,7 @@ def _switch_image(scale, on, focused=False):
 
 def _button_face(scale, color, focused=False):
     # Tk stretches the flat centre of each image and preserves the rounded corners.
-    radius = max(3, round(6 * scale))
+    radius = max(3, round(10 * scale))
     side = 2 * radius + 5
     image = Image.new('RGB', (side * 3, side * 3), SURFACE)
     draw = ImageDraw.Draw(image)
@@ -195,7 +195,7 @@ def _configure_buttons(root, style, scale):
         style.element_create(element, 'image', images[0], ('disabled', images[1]),
                              ('pressed', 'focus', images[5]), ('active', 'focus', images[6]),
                              ('pressed', images[2]), ('active', images[3]), ('focus', images[4]),
-                             border=max(3, p(6)) + 1, padding=0, sticky='nswe')
+                             border=max(3, p(10)) + 1, padding=0, sticky='nswe')
         for name in names:
             menu = name == 'Menu.Glass.TButton'
             style.layout(name, [(element, {'sticky': 'nswe', 'children': [

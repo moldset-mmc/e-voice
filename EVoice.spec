@@ -1,15 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from importlib.util import find_spec
+from pathlib import Path
 
 datas = [('assets/evoice.ico', 'assets')]
-binaries = []
-hiddenimports = ['win32timezone']
-tmp_ret = collect_all('sherpa_onnx')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('pystray')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('_sounddevice_data')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+sherpa = Path(find_spec('sherpa_onnx').origin).parent
+binaries = [(str(sherpa / 'lib' / 'onnxruntime.dll'), 'sherpa_onnx/lib')]
+hiddenimports = ['win32timezone', 'pystray._win32', 'PIL.IcoImagePlugin', 'PIL.PngImagePlugin']
 
 
 a = Analysis(
@@ -21,10 +17,21 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['numpy', 'PIL.AvifImagePlugin', 'PIL._avif', 'PIL.WebPImagePlugin', 'PIL._webp',
+              'PIL._imagingft', 'PIL._imagingcms', 'pystray._darwin', 'pystray._xorg',
+              'pystray._gtk', 'pystray._appindicator'],
     noarchive=False,
     optimize=0,
 )
+# sounddevice's hook also collects PortAudio builds for other operating systems
+# and CPU types. Preserve both Windows x64 drivers, including the ASIO variant.
+def windows_audio(entries):
+    return [entry for entry in entries
+            if '_sounddevice_data/portaudio-binaries/' not in entry[0].replace('\\', '/')
+            or entry[0].endswith(('libportaudio64bit.dll', 'libportaudio64bit-asio.dll'))]
+
+a.datas = windows_audio(a.datas)
+a.binaries = windows_audio(a.binaries)
 pyz = PYZ(a.pure)
 
 exe = EXE(

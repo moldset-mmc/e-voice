@@ -1,13 +1,11 @@
-"""Offline recognition only. No HTTP clients, credentials or transcript storage."""
+"""Offline microphone capture and recognition of normalized float32 samples."""
+from array import array
 from pathlib import Path
 import hashlib
 import json
+import math
 import threading
 import wave
-
-import numpy as np
-import sherpa_onnx
-import sounddevice as sd
 
 RATE = 16000
 
@@ -21,7 +19,7 @@ def segments(samples, rate=RATE, seconds=20):
         if end < len(samples):
             window = max(1, rate // 5)
             candidates = range(max(cursor + rate, end - 5 * rate), end - window + 1, window)
-            cut = min(candidates, key=lambda i: float(np.mean(samples[i:i + window] ** 2)))
+            cut = min(candidates, key=lambda i: sum(v * v for v in samples[i:i + window]))
             end = cut + window // 2
         yield samples[cursor:end]
         cursor = end
@@ -29,6 +27,7 @@ def segments(samples, rate=RATE, seconds=20):
 
 class SpeechEngine:
     def __init__(self, model_dir):
+        import sherpa_onnx
         model_dir = Path(model_dir)
         manifest = json.loads((model_dir / 'manifest.json').read_text(encoding='utf-8'))
         for item in manifest['files']:
@@ -48,17 +47,23 @@ class SpeechEngine:
         )
 
     def transcribe(self, samples, cancel=None):
-        samples = np.asarray(samples, dtype=np.float32).reshape(-1)
-        if len(samples) < RATE // 5 or float(np.max(np.abs(samples))) < 0.001:
+        if isinstance(samples, (bytes, bytearray)):
+            floats = array('f')
+            floats.frombytes(samples)
+            samples = floats
+        elif not isinstance(samples, array) or samples.typecode != 'f':
+            samples = array('f', samples)
+        if len(samples) < RATE // 5:
             return ''
+        padding = array('f', [0]) * (RATE // 5)
         texts = []
         for part in segments(samples):
             if cancel is not None and cancel.is_set():
                 break
-            if float(np.max(np.abs(part))) < 0.001:
+            if max(part) < 0.001 and min(part) > -0.001:
                 continue
             stream = self.recognizer.create_stream()
-            stream.accept_waveform(RATE, np.pad(part, (RATE // 5, RATE // 5)))
+            stream.accept_waveform(RATE, padding + part + padding)
             self.recognizer.decode_stream(stream)
             text = stream.result.text.strip()
             if text:
@@ -69,7 +74,9 @@ class SpeechEngine:
         with wave.open(str(path), 'rb') as source:
             if source.getframerate() != RATE or source.getsampwidth() != 2 or source.getnchannels() != 1:
                 raise ValueError('Нужен WAV: PCM16, моно, 16000 Гц')
-            samples = np.frombuffer(source.readframes(source.getnframes()), dtype='<i2').astype(np.float32) / 32768
+            pcm = array('h')
+            pcm.frombytes(source.readframes(source.getnframes()))
+            samples = array('f', (value / 32768 for value in pcm))
         return self.transcribe(samples, cancel)
 
 
@@ -77,14 +84,15 @@ class Recorder:
     def __init__(self, events):
         self.events = events
         self.stream = None
-        self.chunks = []
+        self.samples = bytearray()
         self.lock = threading.Lock()
         self.frames = 0
         self.overflow = False
         self.limit_reached = False
 
     def start(self, device=None):
-        self.chunks = []
+        import sounddevice as sd
+        self.samples = bytearray()
         self.frames = 0
         self.overflow = False
         self.limit_reached = False
@@ -95,12 +103,14 @@ class Recorder:
                         self.limit_reached = True
                         self.events.put(('record_limit', None))
                     return
-                self.chunks.append(data[:, 0].copy())
+                self.samples.extend(data)
                 self.frames += frames
                 self.overflow = self.overflow or bool(status.input_overflow)
-            self.events.put(('level', float(np.sqrt(np.mean(data ** 2)))))
-        self.stream = sd.InputStream(samplerate=RATE, channels=1, dtype='float32',
-                                     blocksize=1600, device=device, callback=receive)
+            values = memoryview(data).cast('f')
+            level = math.sqrt(sum(v * v for v in values) / frames) if frames else 0
+            self.events.put(('level', level))
+        self.stream = sd.RawInputStream(samplerate=RATE, channels=1, dtype='float32',
+                                        blocksize=1600, device=device, callback=receive)
         try:
             self.stream.start()
         except Exception:
@@ -116,6 +126,5 @@ class Recorder:
             finally:
                 stream.close()
         with self.lock:
-            result = np.concatenate(self.chunks) if self.chunks else np.empty(0, dtype=np.float32)
-            self.chunks = []
+            result, self.samples = self.samples, bytearray()
         return result

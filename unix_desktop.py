@@ -130,6 +130,7 @@ class Desktop:
             self.menu.add_command(label=label, command=action)
         self.canvas.bind('<Button-3>', lambda e: self.menu.tk_popup(e.x_root, e.y_root))
         self.origin = None
+        self.shaped = False
         self.redraw()
         self.io.register_window(root)
         self.io.register_window(self.orb)
@@ -159,7 +160,7 @@ class Desktop:
             appear(self.orb)
         self.orb.lift()
         self.reveals += 1
-        if self.io.display:
+        if self.io.display and not self.shaped:
             self.orb.update_idletasks()
             from Xlib import X
             from Xlib.ext import shape
@@ -173,6 +174,7 @@ class Desktop:
                     window = self.io.display.create_resource_object('window', wid)
                     shape.rectangles(window, shape.SO.Set, shape.SK.Bounding, X.Unsorted, 0, 0, rects)
                 self.io.display.flush()
+                self.shaped = True
 
     def press(self, event):
         self.origin = (event.x_root, event.y_root, self.orb.winfo_x(), self.orb.winfo_y(), event.x <= 29)

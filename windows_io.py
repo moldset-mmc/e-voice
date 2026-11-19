@@ -88,6 +88,10 @@ def choose_target(current, previous, own_pid):
 def activate_target(target):
     if not target or not user32.IsWindow(target[0]):
         return False
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(target[0], ctypes.byref(pid))
+    if pid.value != target[1]:
+        return False
     if foreground() == target:
         return True
     user32.SetForegroundWindow(target[0])

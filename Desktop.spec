@@ -3,10 +3,11 @@ from importlib.util import find_spec
 from pathlib import Path
 import sys
 import sysconfig
+import os
 from PyInstaller.utils.hooks import collect_submodules
 
 mac = sys.platform == 'darwin'
-stage = Path('build/redistributable')
+stage = Path(os.environ['EVOICE_RELEASE_ASSETS'])
 datas = [(str(stage / name), name if name in ('models', 'licenses') else '.') for name in ('models', 'licenses', 'LICENSE', 'THIRD_PARTY.md')]
 lib = Path(find_spec('sherpa_onnx').origin).parent / 'lib'
 extension = '*.dylib' if mac else '*.so*'
@@ -23,7 +24,8 @@ if not mac:
     excludes += ['pynput.mouse._darwin', 'pynput.keyboard._darwin', 'AppKit', 'Quartz']
 else:
     excludes += ['pynput.mouse._xorg', 'pynput.keyboard._xorg', 'Xlib']
-a = Analysis(['desktop_launcher.py'], binaries=binaries, datas=datas, hiddenimports=hidden, excludes=excludes)
+a = Analysis(['desktop_launcher.py'], binaries=binaries, datas=datas, hiddenimports=hidden, excludes=excludes,
+             module_collection_mode={'pynput': 'py', 'Xlib': 'py'})
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='EVoice', console=not mac, upx=False)
 coll = COLLECT(exe, a.binaries, a.datas, name='EVoice', upx=False)

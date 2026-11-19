@@ -67,6 +67,7 @@ class MouseGesture:
         self.thread_id = None
         self.error = None
         self.hook = None
+        self.left_down = False
         self.raw_events = queue.SimpleQueue()
         self.detector = TripleClick(interval=max(0.6, user32.GetDoubleClickTime() / 1000),
                                     distance=max(12, round(12 * user32.GetDpiForSystem() / 96)))
@@ -85,9 +86,11 @@ class MouseGesture:
         # happen outside it so a slow application cannot time out this hook.
         try:
             if code >= 0 and message in (0x0200, 0x0201, 0x0202, 0x0204, 0x0207, 0x020A):
-                event = ctypes.cast(data, ctypes.POINTER(MOUSE_EVENT)).contents
-                # Assistive input, remote desktops and test input are valid clicks.
-                self.raw_events.put((message, (event.pt.x, event.pt.y), event.time / 1000))
+                if message in (0x0201, 0x0202):
+                    self.left_down = message == 0x0201
+                if message != 0x0200 or self.left_down:
+                    event = ctypes.cast(data, ctypes.POINTER(MOUSE_EVENT)).contents
+                    self.raw_events.put((message, (event.pt.x, event.pt.y), event.time / 1000))
         except Exception:
             pass
         return user32.CallNextHookEx(None, code, message, data)

@@ -43,9 +43,7 @@ class SpeechEngine:
 
     def transcribe(self, samples, cancel=None, rate=RATE):
         if isinstance(samples, (bytes, bytearray)):
-            floats = array('f')
-            floats.frombytes(samples)
-            samples = floats
+            samples = memoryview(samples).cast('f')
         elif not isinstance(samples, array) or samples.typecode != 'f':
             samples = array('f', samples)
         if len(samples) < rate // 5:
@@ -58,7 +56,10 @@ class SpeechEngine:
             if max(part) < 0.001 and min(part) > -0.001:
                 continue
             stream = self.recognizer.create_stream()
-            stream.accept_waveform(rate, padding + part + padding)
+            waveform = array('f', padding)
+            waveform.extend(part)
+            waveform.extend(padding)
+            stream.accept_waveform(rate, waveform)
             self.recognizer.decode_stream(stream)
             text = stream.result.text.strip()
             if text:
@@ -96,18 +97,19 @@ class Recorder:
         self.overflow = False
         self.limit_reached = False
         def receive(data, frames, timing, status):
+            buffer = memoryview(data).cast('B')
             with self.lock:
                 count = min(frames, self.rate * 600 - self.frames)
                 if count <= 0:
                     return
-                self.samples.extend(memoryview(data).cast('B')[:count * 4])
+                self.samples.extend(buffer[:count * 4])
                 self.frames += count
                 if self.frames == self.rate * 600 and not self.limit_reached:
                     self.limit_reached = True
                     self.events.put(('record_limit', None))
                 self.overflow = self.overflow or bool(status.input_overflow)
-            values = memoryview(data).cast('f')
-            level = math.sqrt(sum(v * v for v in values) / frames) if frames else 0
+            values = buffer[:count * 4].cast('f')
+            level = math.sqrt(sum(v * v for v in values) / count)
             self.events.put(('level', level))
         def open_stream(rate):
             return sd.RawInputStream(samplerate=rate, channels=1, dtype='float32',

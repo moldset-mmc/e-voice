@@ -67,6 +67,9 @@ class RecognitionSession:
             if process.is_alive():
                 process.terminate()
             process.join(1)
+            if process.is_alive():
+                process.kill()
+                process.join(1)
             if not process.is_alive():
                 process.close()
         if connection:

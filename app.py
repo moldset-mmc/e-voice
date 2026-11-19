@@ -573,9 +573,7 @@ class Application:
                         self.status.set('Текст готов. Отпусти клавиши и нажми «Скопировать текст».')
                     return
                 try:
-                    if foreground()[1] == os.getpid() and target:
-                        activate_target(target)
-                    inserted = insert_text(text + ' ', target)
+                    inserted = bool(target and foreground() == target and insert_text(text + ' ', target))
                     self.status.set(('Текст вставлен под курсор.' if inserted else 'Текст готов. Поле ввода изменилось или недоступно — можно скопировать результат.') + warning)
                 except Exception as exc:
                     self.status.set('Текст готов, но вставка не удалась: ' + str(exc))

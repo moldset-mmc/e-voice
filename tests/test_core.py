@@ -74,6 +74,23 @@ class CoreTests(unittest.TestCase):
         gesture.press(point, now)
         return gesture.release(point, now + 0.03)
 
+    def test_changed_foreground_or_new_recording_cancels_delayed_insertion(self):
+        app = Application.__new__(Application)
+        app.preview, app.copy_button, app.status, app.ready = Mock(), Mock(), Mock(), Mock()
+        app.autopaste, app.root = Mock(), Mock()
+        app.closing, app.take, app.recorder = False, 1, Mock(overflow=False)
+        app.target = (10, 22)
+        with patch('app.modifiers_down', return_value=False), patch('app.foreground', return_value=(20, 33)), patch('app.insert_text') as insert:
+            app.finish('Фраза')
+            callback = app.root.after.call_args.args[1]
+            callback()
+            self.assertEqual(app.last_text, 'Фраза')
+            self.assertFalse(insert.called)
+            app.take += 1
+            with patch('app.foreground', return_value=app.target):
+                callback()
+            self.assertFalse(insert.called)
+
     def test_three_quick_clicks_summon_once(self):
         gesture = TripleClick()
         self.assertFalse(self.click(gesture, (500, 300), 1.0))

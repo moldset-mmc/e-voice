@@ -9,6 +9,7 @@ import sys
 import tkinter
 import platform
 import sysconfig
+import tempfile
 
 from tools.prepare_model import MODEL, prepare
 from model_files import MODEL_NAMES, verify_model
@@ -60,38 +61,48 @@ def stage_assets(destination):
 
 
 def build_unix(version):
-    stage_assets(ROOT / 'build' / 'redistributable')
-    subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', 'Desktop.spec'], cwd=ROOT, check=True)
-    architecture = platform.machine().lower()
     build = ROOT / 'build'
+    build.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=build, prefix='assets-') as temporary:
+        stage_assets(Path(temporary))
+        subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', 'Desktop.spec'], cwd=ROOT,
+                       env=dict(os.environ, EVOICE_RELEASE_ASSETS=temporary), check=True)
+    architecture = platform.machine().lower()
     if sys.platform == 'darwin':
         package = build / 'EVoice-component.pkg'
-        subprocess.run(['pkgbuild', '--component', str(DIST / 'E Voice.app'), '--install-location',
-                        '/Applications', '--identifier', 'io.github.moldset-mmc.evoice',
-                        '--version', version, str(package)], check=True)
+        with tempfile.TemporaryDirectory(dir=build, prefix='pkg-') as payload:
+            subprocess.run(['ditto', str(DIST / 'E Voice.app'), str(Path(payload) / 'E Voice.app')], check=True)
+            subprocess.run(['pkgbuild', '--root', payload, '--component-plist',
+                            str(ROOT / 'installer/mac-components.plist'), '--install-location',
+                            '/Applications', '--identifier', 'io.github.moldset-mmc.evoice',
+                            '--version', version, str(package)], check=True)
         subprocess.run(['productbuild', '--distribution', str(ROOT / 'installer' / 'mac.xml'),
                         '--package-path', str(build), str(DIST / f'E-Voice-macOS-{architecture}.pkg')], check=True)
     else:
         arch = {'x86_64': 'amd64', 'aarch64': 'arm64'}[architecture]
-        root = build / ('deb-' + arch)
-        shutil.copytree(APP, root / 'opt' / 'e-voice', dirs_exist_ok=True, symlinks=True)
-        for source, name in [('installer/e-voice.desktop', 'usr/share/applications/e-voice.desktop'),
-                             ('installer/linux-control', 'DEBIAN/control')]:
-            path = root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text((ROOT / source).read_text().replace('@VERSION@', version).replace('@ARCH@', arch))
-        from PIL import Image
-        icon = root / 'usr/share/icons/hicolor/256x256/apps/e-voice.png'
-        icon.parent.mkdir(parents=True, exist_ok=True)
-        Image.open(ROOT / 'assets/evoice.ico').convert('RGBA').resize((256, 256)).save(icon)
-        link = root / 'usr/bin/e-voice'
-        link.parent.mkdir(parents=True, exist_ok=True)
-        if not link.is_symlink():
-            link.symlink_to('/opt/e-voice/EVoice')
-        subprocess.run(['dpkg-deb', '--root-owner-group', '-Zxz', '-z4', '--build', str(root),
-                        str(DIST / f'E-Voice-Linux-{arch}.deb')], check=True)
+        with tempfile.TemporaryDirectory(dir=build, prefix='deb-') as temp:
+            build_deb(Path(temp), arch, version)
         archive = DIST / f'E-Voice-Linux-{arch}.tar.gz'
         subprocess.run(['tar', '-czf', str(archive), '-C', str(DIST), 'EVoice'], check=True)
+
+
+def build_deb(root, arch, version):
+    shutil.copytree(APP, root / 'opt' / 'e-voice', symlinks=True)
+    for source, name in [('installer/e-voice.desktop', 'usr/share/applications/e-voice.desktop'),
+                         ('installer/linux-control', 'DEBIAN/control')]:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text((ROOT / source).read_text().replace('@VERSION@', version).replace('@ARCH@', arch))
+    from PIL import Image
+    icon = root / 'usr/share/icons/hicolor/64x64/apps/e-voice.png'
+    icon.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(ROOT / 'assets/evoice.ico') as original:
+        original.convert('RGBA').save(icon)
+    link = root / 'usr/bin/e-voice'
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to('/opt/e-voice/EVoice')
+    subprocess.run(['dpkg-deb', '--root-owner-group', '-Zxz', '-z4', '--build', str(root),
+                    str(DIST / f'E-Voice-Linux-{arch}.deb')], check=True)
 
 
 def main():

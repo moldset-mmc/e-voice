@@ -16,6 +16,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
+    module_collection_mode={'pystray': 'py'},
     runtime_hooks=[],
     excludes=['unix_desktop', 'unix_input', 'numpy', 'PIL.AvifImagePlugin', 'PIL._avif', 'PIL.WebPImagePlugin', 'PIL._webp',
               'PIL._imagingft', 'PIL._imagingcms', 'pystray._darwin', 'pystray._xorg',

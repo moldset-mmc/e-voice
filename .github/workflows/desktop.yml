@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with: {persist-credentials: false}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with: {python-version: '3.14.5'}
+        with: {python-version: '3.14.10'}
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
@@ -40,7 +40,8 @@ jobs:
         shell: bash
         run: |
           sudo dpkg -i dist/*.deb
-          xvfb-run -a bash -ec 'openbox >/tmp/evoice-wm.log 2>&1 & python tools/check_install.py /opt/e-voice/EVoice'
+          sudo unshare --net /opt/e-voice/EVoice --transcribe tests/fixtures/russian-example.wav --output build/qa-offline.json
+          xvfb-run -a bash -ec 'openbox >/tmp/evoice-wm.log 2>&1 & python tools/check_install.py /opt/e-voice/EVoice; python tools/check_x11.py'
           mkdir -p build/archive-check
           tar -xzf dist/*.tar.gz -C build/archive-check
           build/archive-check/EVoice/EVoice --transcribe tests/fixtures/russian-example.wav --output build/archive-speech.json
@@ -49,13 +50,24 @@ jobs:
         shell: bash
         run: |
           installer -pkg "$(find dist -name '*.pkg' -maxdepth 1)" -target CurrentUserHomeDirectory
+          sandbox-exec -p '(version 1)(allow default)(deny network*)' "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice" --transcribe tests/fixtures/russian-example.wav --output build/qa-offline.json
           python tools/check_install.py "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice"
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $setup = Start-Process -Wait -PassThru -FilePath ".\dist\E-Voice-Setup-x64.exe" -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
           if ($setup.ExitCode) { exit $setup.ExitCode }
-          python tools/check_install.py "$env:LOCALAPPDATA\Programs\E Voice\EVoice.exe"
+          $exe = "$env:LOCALAPPDATA\Programs\E Voice\EVoice.exe"
+          New-NetFirewallRule -DisplayName 'E Voice offline CI' -Direction Outbound -Action Block -Program $exe -ErrorAction Stop | Out-Null
+          try {
+            python tools/check_install.py $exe
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            Copy-Item -LiteralPath 'build/qa-speech.json' -Destination 'build/qa-offline.json'
+          } finally {
+            Remove-NetFirewallRule -DisplayName 'E Voice offline CI'
+          }
+      - shell: bash
+        run: python -c "import json; assert 'похвал' in json.load(open('build/qa-offline.json',encoding='utf-8'))['text'].lower()"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ matrix.asset }}

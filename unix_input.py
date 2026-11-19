@@ -125,6 +125,7 @@ class DesktopInput:
             if not AXIsProcessTrusted() or (hasattr(q, 'CGPreflightListenEventAccess') and not q.CGPreflightListenEventAccess()):
                 self.note = 'Для сочетания и автовставки разрешите универсальный доступ и мониторинг ввода в macOS.'
                 return
+            self.note = ''
         from pynput import keyboard, mouse
         replacement = keyboard.GlobalHotKeys({expression: lambda: self.events.put(('hotkey', None))})
         replacement.start()

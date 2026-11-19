@@ -342,7 +342,7 @@ def run_checks(root, app, result_path):
             frames.frombytes(source.readframes(source.getframerate()))
         audio = array('f', (v / 32768 for v in frames)).tobytes()
         recorder = app.recorder
-        app.recorder = SimpleNamespace(start=lambda device: None, stop=lambda: audio, stream=None, overflow=False)
+        app.recorder = SimpleNamespace(start=lambda device: None, stop=lambda: audio, stream=None, overflow=False, rate=16000)
         app.test_audio = None
         original_finish = app.finish
         trials = [('cold', 1000), ('warm', 1000)] * 3 + [('immediate', 0)]

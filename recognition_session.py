@@ -17,7 +17,7 @@ def _recognize(connection, model_directory):
                 connection.send((False, error))
                 return
             try:
-                text = engine.transcribe(audio) if kind == 'audio' else engine.transcribe_file(path)
+                text = engine.transcribe(audio, rate=path) if kind == 'audio' else engine.transcribe_file(path)
                 connection.send((True, text))
             except Exception as exc:
                 connection.send((False, str(exc)))
@@ -48,12 +48,12 @@ class RecognitionSession:
             remote.close()
         self.connection, self.process = local, process
 
-    def transcribe(self, audio, test_file=None):
+    def transcribe(self, audio, test_file=None, rate=16000):
         connection = self.connection
         if test_file:
             connection.send(('file', str(test_file)))
         else:
-            connection.send(('audio', None))
+            connection.send(('audio', rate))
             connection.send_bytes(audio)
         ok, result = connection.recv()
         if not ok:

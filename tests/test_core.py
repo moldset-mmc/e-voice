@@ -8,6 +8,8 @@ import threading
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+if sys.platform != 'win32':
+    raise unittest.SkipTest('Windows-specific desktop integration')
 from speech_engine import Recorder, segments, SpeechEngine, RATE
 from app import Application
 from windows_io import GlobalHotkey, INPUT, choose_target, hotkey_label, parse_hotkey, text_key_events
@@ -58,6 +60,7 @@ class CoreTests(unittest.TestCase):
         app.autopaste.get.return_value = True
         app.root.after.side_effect = lambda delay, callback: callback()
         app.closing = False
+        app.take, app.recorder = 0, Mock(overflow=False)
         app.target = (10, 99)
         with patch('app.modifiers_down', return_value=False), patch('app.foreground', return_value=app.target), \
                 patch('app.insert_text', return_value=True) as insert:

@@ -2,11 +2,13 @@
 
 from functools import lru_cache
 import time
+import sys
 import tkinter as tk
 from tkinter import ttk
 
 from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageOps, ImageTk
-from popup_glass import CORNER_DIP, GlassBackdrop
+if sys.platform == 'win32':
+    from popup_glass import CORNER_DIP, GlassBackdrop
 
 
 SURFACE = '#EFF4F6'

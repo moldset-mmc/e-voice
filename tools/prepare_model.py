@@ -1,23 +1,18 @@
 """Restore the model pinned in git, or verify an existing offline copy."""
 import argparse
-import hashlib
-import json
 from pathlib import Path
+import sys
 import tempfile
 from urllib.request import urlopen
 
 MODEL = Path(__file__).resolve().parents[1] / 'models' / 'gigaam-v3'
-
-
-def verified(path, entry):
-    if not path.is_file() or path.stat().st_size != entry['bytes']:
-        return False
-    with path.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest() == entry['sha256']
+if __name__ == '__main__':
+    sys.path.insert(0, str(MODEL.parents[1]))
+from model_files import model_entries, verified
 
 
 def prepare(offline=False):
-    manifest = json.loads((MODEL / 'manifest.json').read_text(encoding='utf-8'))
+    manifest = model_entries(MODEL)
     remote = f"https://huggingface.co/{manifest['repository']}/resolve/{manifest['revision']}/"
     for entry in manifest['files']:
         name = entry['name']

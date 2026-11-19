@@ -13,6 +13,10 @@ VersionInfoDescription=E Voice Offline Setup
 DefaultDirName={localappdata}\Programs\E Voice
 DefaultGroupName=E Voice
 DisableProgramGroupPage=yes
+DisableDirPage=yes
+DisableReadyPage=yes
+DisableWelcomePage=yes
+DisableFinishedPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -24,15 +28,13 @@ OutputDir=..\dist
 OutputBaseFilename=E-Voice-Setup-x64
 Compression=lzma2/normal
 SolidCompression=yes
-CloseApplications=yes
+AppMutex=Local\LocalVoiceRussianOffline
+CloseApplications=no
 RestartApplications=no
 
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
-
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "..\dist\EVoice\EVoice.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -40,10 +42,10 @@ Source: "..\dist\EVoice\_internal\*"; DestDir: "{app}\_internal"; Flags: ignorev
 Source: "..\dist\EVoice\models\gigaam-v3\*"; DestDir: "{app}\models\gigaam-v3"; Flags: ignoreversion
 Source: "..\dist\EVoice\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\EVoice\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\EVoice\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\E Voice"; Filename: "{app}\EVoice.exe"
-Name: "{autodesktop}\E Voice"; Filename: "{app}\EVoice.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\EVoice.exe"; Description: "{cm:LaunchProgram,E Voice}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\EVoice.exe"; Flags: nowait skipifsilent

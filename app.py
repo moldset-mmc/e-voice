@@ -2,6 +2,9 @@
 if __name__ == '__main__':
     from multiprocessing import freeze_support
     freeze_support()
+    from desktop_entry import dispatch
+    if dispatch():
+        raise SystemExit(0)
 
 import argparse
 import ctypes
@@ -34,6 +37,7 @@ from mouse_gesture import MouseGesture
 from dpi_awareness import enable_dpi_awareness
 from choices import ChoicePopup
 from recognition_session import RecognitionSession
+from preferences import read_settings, write_settings
 
 BASE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get('EVOICE_DATA_DIR') or (Path(os.environ.get('LOCALAPPDATA', BASE)) / 'E Voice'))
@@ -75,6 +79,7 @@ class Application:
         self.model_idle_ms = 30_000
         self.state = 'loading'
         self.target = None
+        self.take = 0
         self.last_target = None
         self.floating = None
         self.last_text = ''
@@ -90,10 +95,7 @@ class Application:
         self.worker = None
         self.test_audio = test_audio
         self.config_path = DATA_DIR / 'settings.json'
-        try:
-            self.config = {} if test_mode else json.loads(self.config_path.read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            self.config = {}
+        self.config = {} if test_mode else read_settings(self.config_path)
         self.make_window()
         self.install_hotkey(self.key_var.get())
         self.make_tray()
@@ -101,8 +103,12 @@ class Application:
         if not isinstance(position, list) or len(position) != 2 or not all(isinstance(x, int) for x in position):
             position = None
         self.floating = FloatingControl(self.events, position, schedule=root.after)
-        self.show_float.set(True)
-        self.floating.show_at()
+        if not self.show_float.get():
+            self.floating.finish_minimize()
+        elif position:
+            self.floating.visible(True)
+        else:
+            self.floating.show_at()
         try:
             self.mouse_gesture = MouseGesture(self.events)
         except Exception as exc:
@@ -322,10 +328,7 @@ class Application:
                            show_float=self.show_float.get(), triple_click=self.summon_enabled.get(),
                            auto_hide_recording=self.auto_hide_recording.get())
         try:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = self.config_path.with_suffix('.tmp')
-            temporary.write_text(json.dumps(self.config, ensure_ascii=False, indent=2), encoding='utf-8')
-            temporary.replace(self.config_path)
+            write_settings(self.config_path, self.config)
         except OSError:
             self.status.set('Настройки работают, но сохранить их на диск не удалось.')
 
@@ -489,6 +492,7 @@ class Application:
 
     def toggle(self):
         if self.state == 'ready':
+            self.take += 1
             current = foreground()
             self.target = choose_target(current, self.last_target, os.getpid())
             try:
@@ -539,9 +543,7 @@ class Application:
             self.floating.update('transcribing')
             def work():
                 try:
-                    text = self.session.transcribe(audio, self.test_audio)
-                    if self.recorder.overflow:
-                        self.events.put(('error', 'Во время записи были пропуски звука; проверь результат.'))
+                    text = self.session.transcribe(audio, self.test_audio, self.recorder.rate)
                     self.events.put(('text', text))
                 except Exception as exc:
                     self.events.put(('error', 'Не удалось распознать речь: ' + str(exc)))
@@ -556,11 +558,13 @@ class Application:
         self.preview.insert('1.0', text)
         self.preview.configure(state='disabled')
         self.copy_button.configure(state='normal' if text else 'disabled')
-        self.ready('Речь не обнаружена.' if not text else 'Текст готов.')
+        warning = ' Были пропуски звука.' if self.recorder.overflow else ''
+        self.ready(('Речь не обнаружена.' if not text else 'Текст готов.') + warning)
         if text and self.autopaste.get():
             deadline = time.monotonic() + 5
+            target, take = self.target, self.take
             def insert():
-                if self.closing:
+                if self.closing or take != self.take:
                     return
                 if modifiers_down():
                     if time.monotonic() < deadline:
@@ -569,11 +573,10 @@ class Application:
                         self.status.set('Текст готов. Отпусти клавиши и нажми «Скопировать текст».')
                     return
                 try:
-                    target = choose_target(foreground(), self.target, os.getpid())
                     if foreground()[1] == os.getpid() and target:
                         activate_target(target)
                     inserted = insert_text(text + ' ', target)
-                    self.status.set('Текст вставлен под курсор.' if inserted else 'Текст готов. Поле ввода недоступно — можно скопировать результат.')
+                    self.status.set(('Текст вставлен под курсор.' if inserted else 'Текст готов. Поле ввода изменилось или недоступно — можно скопировать результат.') + warning)
                 except Exception as exc:
                     self.status.set('Текст готов, но вставка не удалась: ' + str(exc))
             self.root.after(80, insert)

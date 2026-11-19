@@ -17,7 +17,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['numpy', 'PIL.AvifImagePlugin', 'PIL._avif', 'PIL.WebPImagePlugin', 'PIL._webp',
+    excludes=['unix_desktop', 'unix_input', 'numpy', 'PIL.AvifImagePlugin', 'PIL._avif', 'PIL.WebPImagePlugin', 'PIL._webp',
               'PIL._imagingft', 'PIL._imagingcms', 'pystray._darwin', 'pystray._xorg',
               'pystray._gtk', 'pystray._appindicator'],
     noarchive=False,

@@ -7,13 +7,12 @@ import os
 from pathlib import Path
 import queue
 import sys
-import threading
-import time
 import tkinter as tk
 from tkinter import ttk
 
 from PIL import ImageTk
 from desktop_entry import model_directory
+from dictation import IDLE_RELEASE_MS, transcribe_in_background
 from glass_theme import SURFACE, configure_settings, glass_disc
 from preferences import read_settings, write_settings
 from recognition_session import RecognitionSession
@@ -319,13 +318,9 @@ class Desktop:
             self.state = 'transcribing'
             self.action.configure(text='Распознаю…', state='disabled')
             self.status.set('Распознаю речь…')
-            def recognize():
-                try:
-                    text = self.engine.transcribe(audio, self.test_audio, self.recorder.rate)
-                    self.events.put(('result', text))
-                except Exception as exc:
-                    self.events.put(('error', str(exc)))
-            threading.Thread(target=recognize, daemon=True).start()
+            transcribe_in_background(
+                self.engine, self.events, audio, self.test_audio, self.recorder.rate,
+                result_event='result')
         self.redraw()
 
     def finish(self, text, error=''):
@@ -334,7 +329,7 @@ class Desktop:
         self.devices_box.configure(state='readonly')
         self.level['value'] = 0
         self.redraw()
-        self.idle = self.root.after(30000, self.release_model)
+        self.idle = self.root.after(IDLE_RELEASE_MS, self.release_model)
         if error:
             self.status.set(error)
             return
@@ -356,7 +351,11 @@ class Desktop:
                     message = 'Поле ввода недоступно. Текст можно скопировать.'
             except Exception:
                 message = 'Вставка недоступна. Текст можно скопировать.'
-        self.status.set(message + (' Были пропуски звука.' if self.recorder.overflow else ''))
+        if self.recorder.limit_reached:
+            message += ' Запись остановлена по достижении предела в 10 минут.'
+        if self.recorder.overflow:
+            message += ' Были пропуски звука.'
+        self.status.set(message)
 
     def release_model(self):
         self.idle = None

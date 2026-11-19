@@ -81,6 +81,7 @@ class DesktopInput:
     def paste(self, text, target):
         if self.wayland or not target or self.target()[0] != target:
             return False
+        saved = self._read_clipboard()
         if sys.platform == 'darwin':
             from ApplicationServices import AXIsProcessTrusted
             import Quartz as q
@@ -100,7 +101,26 @@ class DesktopInput:
             for kind, key in ((X.KeyPress, ctrl), (X.KeyPress, v), (X.KeyRelease, v), (X.KeyRelease, ctrl)):
                 xtest.fake_input(self.display, kind, key)
             self.display.sync()
+        if saved is not None:
+            self._restore_clipboard(saved)
         return True
+
+    def _read_clipboard(self):
+        try:
+            return self.root.clipboard_get()
+        except Exception:
+            return None
+
+    def _restore_clipboard(self, saved):
+        # The synthesized paste chord is asynchronous in the target app; hand the
+        # user's previous clipboard back after it has had a moment to land.
+        def restore():
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(saved)
+            except Exception:
+                pass
+        self.root.after(600, restore)
 
     def copy(self, text):
         self.root.clipboard_clear()

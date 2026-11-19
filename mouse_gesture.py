@@ -3,7 +3,6 @@ import ctypes
 from ctypes import wintypes
 import os
 import threading
-import time
 import queue
 
 from windows_io import user32, kernel32

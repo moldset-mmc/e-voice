@@ -117,6 +117,27 @@ class Recorder:
         self.rate = RATE
         self.overflow = False
         self.limit_reached = False
+        self._level_tick = 0
+
+    def _on_audio(self, data, frames, timing, status):
+        buffer = memoryview(data).cast('B')
+        with self.lock:
+            count = min(frames, self.rate * 600 - self.frames)
+            if count <= 0:
+                return
+            self.samples.extend(buffer[:count * 4])
+            self.frames += count
+            if self.frames == self.rate * 600 and not self.limit_reached:
+                self.limit_reached = True
+                self.events.put(('record_limit', None))
+            self.overflow = self.overflow or bool(status.input_overflow)
+        # Throttle the meter to ~5 Hz (callback fires roughly every 100 ms);
+        # the first frame still reports immediately so the meter reacts at once.
+        self._level_tick += 1
+        if self._level_tick % 2 == 1:
+            values = buffer[:count * 4].cast('f')
+            level = math.sqrt(sum(v * v for v in values) / count)
+            self.events.put(('level', level))
 
     def start(self, device=None):
         import sounddevice as sd
@@ -124,24 +145,10 @@ class Recorder:
         self.frames = 0
         self.overflow = False
         self.limit_reached = False
-        def receive(data, frames, timing, status):
-            buffer = memoryview(data).cast('B')
-            with self.lock:
-                count = min(frames, self.rate * 600 - self.frames)
-                if count <= 0:
-                    return
-                self.samples.extend(buffer[:count * 4])
-                self.frames += count
-                if self.frames == self.rate * 600 and not self.limit_reached:
-                    self.limit_reached = True
-                    self.events.put(('record_limit', None))
-                self.overflow = self.overflow or bool(status.input_overflow)
-            values = buffer[:count * 4].cast('f')
-            level = math.sqrt(sum(v * v for v in values) / count)
-            self.events.put(('level', level))
+        self._level_tick = 0
         def open_stream(rate):
             return sd.RawInputStream(samplerate=rate, channels=1, dtype='float32',
-                                     blocksize=rate // 10, device=device, callback=receive)
+                                     blocksize=rate // 10, device=device, callback=self._on_audio)
         self.rate = RATE
         try:
             self.stream = open_stream(self.rate)

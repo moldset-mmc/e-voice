@@ -37,6 +37,7 @@ from mouse_gesture import MouseGesture
 from dpi_awareness import enable_dpi_awareness
 from choices import ChoicePopup
 from recognition_session import RecognitionSession
+from dictation import IDLE_RELEASE_MS, transcribe_in_background
 from preferences import read_settings, write_settings
 
 BASE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
@@ -76,7 +77,7 @@ class Application:
         self.recorder = Recorder(self.events)
         self.session = RecognitionSession(BASE / 'models' / 'gigaam-v3')
         self.idle_release = None
-        self.model_idle_ms = 30_000
+        self.model_idle_ms = IDLE_RELEASE_MS
         self.state = 'loading'
         self.target = None
         self.take = 0
@@ -541,14 +542,9 @@ class Application:
             self.tray.icon = icon_image()
             self.tray.title = 'E Voice — распознавание'
             self.floating.update('transcribing')
-            def work():
-                try:
-                    text = self.session.transcribe(audio, self.test_audio, self.recorder.rate)
-                    self.events.put(('text', text))
-                except Exception as exc:
-                    self.events.put(('error', 'Не удалось распознать речь: ' + str(exc)))
-            self.worker = threading.Thread(target=work, daemon=True)
-            self.worker.start()
+            self.worker = transcribe_in_background(
+                self.session, self.events, audio, self.test_audio, self.recorder.rate,
+                result_event='text', error_prefix='Не удалось распознать речь: ')
 
     def finish(self, text):
         text = text.rstrip()
@@ -558,7 +554,9 @@ class Application:
         self.preview.insert('1.0', text)
         self.preview.configure(state='disabled')
         self.copy_button.configure(state='normal' if text else 'disabled')
-        warning = ' Были пропуски звука.' if self.recorder.overflow else ''
+        warning = ' Запись остановлена по достижении предела в 10 минут.' if self.recorder.limit_reached else ''
+        if self.recorder.overflow:
+            warning += ' Были пропуски звука.'
         self.ready(('Речь не обнаружена.' if not text else 'Текст готов.') + warning)
         if text and self.autopaste.get():
             deadline = time.monotonic() + 5

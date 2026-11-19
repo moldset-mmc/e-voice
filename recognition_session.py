@@ -1,5 +1,11 @@
 """Keep model allocations outside the UI and release them between dictation sessions."""
 import multiprocessing as mp
+import time
+
+#: A dictation can run up to 10 minutes; allow generous CPU headroom before
+#: declaring the recognizer process unresponsive (see :meth:`RecognitionSession.transcribe`).
+TIMEOUT_CAP = 1800.0
+TIMEOUT_FLOOR = 60.0
 
 
 def _recognize(connection, model_directory):
@@ -48,17 +54,58 @@ class RecognitionSession:
             remote.close()
         self.connection, self.process = local, process
 
-    def transcribe(self, audio, test_file=None, rate=16000):
+    def transcribe(self, audio, test_file=None, rate=16000, timeout=None):
+        """Transcribe with a bounded wait so the UI can never hang forever.
+
+        The recognizer runs in a separate process; if it stops answering
+        (a rare deadlock on unusual hardware), the caller is released after
+        ``timeout`` seconds and the process is killed so the next session
+        respawns cleanly.
+        """
         connection = self.connection
         if test_file:
             connection.send(('file', str(test_file)))
         else:
             connection.send(('audio', rate))
             connection.send_bytes(audio)
-        ok, result = connection.recv()
-        if not ok:
-            raise RuntimeError(result)
-        return result
+        if timeout is None:
+            timeout = self._default_timeout(audio, test_file, rate)
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._abort()
+                raise RuntimeError('Распознавание не ответило вовремя. Попробуйте ещё раз.')
+            if connection.poll(remaining):
+                ok, result = connection.recv()
+                if not ok:
+                    raise RuntimeError(result)
+                return result
+
+    @staticmethod
+    def _default_timeout(audio, test_file, rate):
+        if test_file:
+            # transcribe_file caps WAV input at 10 minutes.
+            return min(TIMEOUT_CAP, 660.0)
+        if isinstance(audio, (bytes, bytearray)):
+            seconds = max(1, len(audio) // (4 * rate))
+            return min(TIMEOUT_CAP, max(TIMEOUT_FLOOR, seconds * 3 + 60))
+        return TIMEOUT_FLOOR
+
+    def _abort(self):
+        process, connection = self.process, self.connection
+        self.process = self.connection = None
+        if process:
+            if process.is_alive():
+                process.terminate()
+                process.join(1)
+                if process.is_alive():
+                    process.kill()
+                    process.join(1)
+            if not process.is_alive():
+                process.close()
+        if connection:
+            connection.close()
 
     def close(self):
         connection, process = self.connection, self.process

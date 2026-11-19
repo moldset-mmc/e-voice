@@ -11,7 +11,7 @@ import win32con
 import win32gui
 from floating_surface import FloatingSurface
 from glass_theme import CAPTIONS, GLASS_ALPHA
-from windows_io import activate_target, foreground, over_taskbar
+from windows_io import activate_target, foreground
 
 CLASS_NAME = 'LocalVoiceFloatingControl'
 RESTORE_MESSAGE = win32con.WM_APP + 19
@@ -132,7 +132,7 @@ class FloatingControl:
         monitor = win32api.MonitorFromPoint((x, y), win32con.MONITOR_DEFAULTTONEAREST)
         x, y = fit_to_work_area((x, y), win32api.GetMonitorInfo(monitor)['Work'])
         self.hwnd = user32.CreateWindowExW(
-            win32con.WS_EX_TOPMOST | win32con.WS_EX_APPWINDOW | win32con.WS_EX_NOACTIVATE | win32con.WS_EX_LAYERED,
+            win32con.WS_EX_TOPMOST | win32con.WS_EX_TOOLWINDOW | win32con.WS_EX_NOACTIVATE | win32con.WS_EX_LAYERED,
             self.class_name, 'E Voice — быстрая кнопка',
             win32con.WS_POPUP | win32con.WS_CLIPCHILDREN,
             x, y, WIDTH, HEIGHT, 0, 0, self.instance, None,
@@ -195,19 +195,17 @@ class FloatingControl:
             self.events.put(('quick_menu', None))
             return 0
         if message == RESTORE_MESSAGE:
-            self.events.put(('show_float', None))
+            # A second launch opens settings without opting back into the microphone overlay.
+            self.events.put(('show', None))
             return 0
         if message == win32con.WM_SYSCOMMAND:
             command = wparam & 0xFFF0
             if command == win32con.SC_MINIMIZE:
-                self.events.put(('icon_float', False))
+                self.events.put(('hide_float', None))
                 return 0
             if command == win32con.SC_RESTORE:
-                self.events.put(('icon_float', not self.is_shown() or not over_taskbar()))
+                self.events.put(('show', None))
                 return 0
-        if message == win32con.WM_ACTIVATE and (wparam & 0xFFFF) != win32con.WA_INACTIVE:
-            if self.is_shown() and not self.drag_origin and over_taskbar():
-                self.events.put(('icon_float', False))
         if message == win32con.WM_COMMAND and ((wparam >> 16) & 0xFFFF) == win32con.BN_CLICKED:
             control = wparam & 0xFFFF
             if control == 1001:
@@ -263,7 +261,7 @@ class FloatingControl:
         if not enabled:
             if self.is_shown() and not self.hiding:
                 self.hiding = True
-                self.animate_opacity(0, FADE_OUT_SECONDS, self.finish_minimize)
+                self.animate_opacity(0, FADE_OUT_SECONDS, self.finish_hide)
             return
         if self.is_shown():
             if self.hiding:
@@ -276,9 +274,15 @@ class FloatingControl:
         self.keep_on_top()
         self.fade_in()
 
-    def finish_minimize(self):
+    def finish_hide(self):
+        # Hiding the optional overlay must not leave a minimized taskbar window.
+        # Also invalidate queued frames when called directly during startup/shutdown.
+        self.fade_version += 1
+        self.icon_generation += 1
+        self.icon_transition = (None, 1.0)
         self.hiding = False
-        win32gui.ShowWindow(self.hwnd, win32con.SW_SHOWMINNOACTIVE)
+        self.hovered = None
+        win32gui.ShowWindow(self.hwnd, win32con.SW_HIDE)
         self.set_opacity(GLASS_ALPHA)
 
     def apply_layout(self, dpi, on_left=None):
@@ -355,9 +359,16 @@ class FloatingControl:
     def refresh_hover(self):
         if not self.is_shown():
             return
-        point = win32gui.GetCursorPos()
-        hit = win32gui.WindowFromPoint(point)
-        hovered = self.part_at(point) if hit in (self.hwnd, self.button, self.menu_button) else None
+        try:
+            point = win32gui.GetCursorPos()
+            hit = win32gui.WindowFromPoint(point)
+            hovered = self.part_at(point) if hit in (self.hwnd, self.button, self.menu_button) else None
+        except win32gui.error as error:
+            # Secure/locked desktops can temporarily deny pointer inspection. Hover is
+            # cosmetic: retry on the next UI tick, without logging at polling frequency.
+            if error.winerror != 5:  # ERROR_ACCESS_DENIED
+                raise
+            return
         if hovered == self.hovered:
             return
         self.hovered = hovered

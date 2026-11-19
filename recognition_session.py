@@ -1,5 +1,6 @@
 """Keep model allocations outside the UI and release them between dictation sessions."""
 import multiprocessing as mp
+import threading
 import time
 
 #: A dictation can run up to 10 minutes; allow generous CPU headroom before
@@ -37,9 +38,11 @@ class RecognitionSession:
     def __init__(self, model_directory):
         self.model_directory = model_directory
         self.process = self.connection = None
+        self._close_lock = threading.Lock()
+        self._teardown_pending = False
 
     def warm(self):
-        if self.process and self.process.is_alive():
+        if not self._teardown_pending and self.connection is not None and self.process and self.process.is_alive():
             return
         self.close()
         context = mp.get_context('spawn')
@@ -93,31 +96,50 @@ class RecognitionSession:
         return TIMEOUT_FLOOR
 
     def _abort(self):
-        process, connection = self.process, self.connection
-        self.process = self.connection = None
-        if process:
-            if process.is_alive():
-                process.terminate()
-                process.join(1)
-                if process.is_alive():
-                    process.kill()
-                    process.join(1)
-            if not process.is_alive():
-                process.close()
-        if connection:
-            connection.close()
+        self.close()
 
     def close(self):
-        connection, process = self.connection, self.process
-        self.connection = self.process = None
-        if process:
-            if process.is_alive():
-                process.terminate()
-            process.join(1)
-            if process.is_alive():
-                process.kill()
-                process.join(1)
-            if not process.is_alive():
-                process.close()
-        if connection:
-            connection.close()
+        # Timeout recovery and GUI exit can race. Serialize only teardown, never
+        # transcription's pipe wait, so each native handle is closed just once.
+        with self._close_lock:
+            self._teardown_pending = True
+            connection, process = self.connection, self.process
+            self.connection = None
+            errors = []
+
+            def attempt(name, action, default=None):
+                try:
+                    return action()
+                except Exception as exc:
+                    errors.append((name, exc))
+                    return default
+
+            try:
+                if process:
+                    if attempt('is_alive', process.is_alive, True):
+                        attempt('terminate', process.terminate)
+                    attempt('join', lambda: process.join(1))
+                    if attempt('is_alive', process.is_alive, True):
+                        # Still try kill if terminate or the first join failed.
+                        attempt('kill', process.kill)
+                        attempt('join after kill', lambda: process.join(1))
+                    if attempt('is_alive', process.is_alive, True):
+                        errors.append(('process', RuntimeError('Recognizer remains alive after terminate/kill')))
+                        # Keep the handle visible and retryable, rather than
+                        # reporting an idle session while a model still lives.
+                    else:
+                        def release_process():
+                            process.close()
+                            self.process = None
+                        attempt('process.close', release_process)
+            finally:
+                if connection:
+                    try:
+                        connection.close()
+                    except Exception as exc:
+                        self.connection = connection  # Preserve a failed close for retry.
+                        errors.append(('connection.close', exc))
+            if errors:
+                details = '; '.join(f'{name}: {exc}' for name, exc in errors)
+                raise RuntimeError('Recognizer cleanup failed: ' + details) from errors[0][1]
+            self._teardown_pending = False

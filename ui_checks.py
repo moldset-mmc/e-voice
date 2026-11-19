@@ -1,5 +1,8 @@
 """Exercise our own real Windows/Tk event loop without injecting user input or using a microphone."""
 import json
+from pathlib import Path
+import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -16,31 +19,71 @@ from dpi_awareness import current_awareness
 from glass_theme import GLASS_ALPHA, MENU_ALPHA, SETTINGS_ALPHA
 
 
+def synthetic_recorder(audio, rate=16000):
+    """Mirror every recorder attribute consumed by the normal dictation path."""
+    return SimpleNamespace(start=lambda device: None, stop=lambda: audio,
+                           stream=None, overflow=False, limit_reached=False, rate=rate)
+
+
 def run_checks(root, app, result_path):
     checks = {}
     measurements = {}
     deadline = time.monotonic() + 110
+    finished = False
+    watchdog = None
+    peer = None
     # Test state stays in this process; never overwrite the user's preferences.
     app.save_settings = lambda: None
     app.autopaste.set(False)  # This test must never type into another application.
     app.auto_hide_recording.set(False)
+    checks['floating_hidden_by_default'] = not app.show_float.get() and not app.floating.is_shown()
+    checks['mouse_hook_absent_by_default'] = app.mouse_gesture is None
     app.summon_enabled.set(True)
+    app.configure_mouse_gesture()
 
     def finish(error=None):
+        nonlocal finished
+        if finished:
+            return
+        finished = True
+        if watchdog is not None:
+            root.after_cancel(watchdog)
+        if peer is not None and peer.poll() is None:
+            try:
+                peer.kill()
+            except OSError:
+                # The second instance may have exited between poll and kill.
+                traceback.print_exc()
         if error:
             checks['error'] = str(error)
+        checks['exit_requested_via_event_queue'] = True
         checks['passed'] = not error and all(value is True for value in checks.values())
-        result_path.write_text(json.dumps({**checks, 'measurements': measurements}, ensure_ascii=False, indent=2), encoding='utf-8')
-        app.exit()
+        try:
+            result_path.write_text(json.dumps({**checks, 'measurements': measurements}, ensure_ascii=False, indent=2), encoding='utf-8')
+        finally:
+            # Use the same dispatch path as the tray's Exit item. The external
+            # runner requires process exit and zero surviving child processes.
+            app.events.put(('exit', None))
 
     def guard(action):
-        def wrapped():
+        def wrapped(*args, **kwargs):
+            if finished:
+                return
             try:
-                action()
+                return action(*args, **kwargs)
             except Exception as exc:
                 traceback.print_exc()
                 finish(exc)
         return wrapped
+
+    def callback_failed(typ, value, tb):
+        traceback.print_exception(typ, value, tb)
+        finish(value)
+
+    root.report_callback_exception = callback_failed
+    # Independent of the current phase: benchmark callbacks can fail before
+    # scheduling their successor, so wait_ready/wait_for alone are not enough.
+    watchdog = root.after(110_000, lambda: finish('GUI/model test global deadline exceeded'))
 
     def wait_ready(next_action):
         if app.state == 'ready':
@@ -63,6 +106,68 @@ def run_checks(root, app, result_path):
         return (bool(glass.hwnd and win32gui.IsWindowVisible(glass.hwnd)) and
                 win32gui.GetWindow(glass.front, win32con.GW_OWNER) == glass.hwnd and
                 win32gui.GetWindowRect(glass.front) == win32gui.GetWindowRect(glass.hwnd))
+
+    def exercise_tray_left_click():
+        app.tray._on_notify(0, win32con.WM_LBUTTONUP)
+        wait_for(lambda: root.state() == 'normal', tray_settings_opened,
+                 'Default tray click did not open settings')
+
+    def tray_settings_opened():
+        checks['tray_left_click_opens_settings'] = app.settings_motion.open
+        app.hide()
+        wait_for(lambda: root.state() == 'withdrawn', exercise_second_instance,
+                 'Settings did not hide before relaunch check')
+
+    def exercise_second_instance():
+        nonlocal peer
+        command = [sys.executable]
+        if not getattr(sys, 'frozen', False):
+            command.append(str(Path(__file__).with_name('app.py')))
+        command += ['--test-audio', str(app.test_audio), '--interaction-test',
+                    str(result_path.with_name('qa-second-instance-unused.json'))]
+        # main() shares a test-only mutex ID with this child, never the regular
+        # application's mutex. Native window lookup is scoped to our process.
+        peer = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        wait_for(lambda: peer.poll() is not None and root.state() == 'normal',
+                 second_instance_finished, 'Second instance did not restore settings and exit')
+
+    def second_instance_finished():
+        checks['second_instance_opens_settings'] = peer.returncode == 0 and app.settings_motion.open
+        measurements['second_instance_exit_code'] = peer.returncode
+        app.hide()
+        wait_for(lambda: root.state() == 'withdrawn', exercise_appearance,
+                 'Settings did not close after relaunch')
+
+    def exercise_cursor_denial():
+        refresh = app.floating.refresh_hover
+        denied_calls = 0
+
+        def deny_once():
+            nonlocal denied_calls
+            denied_calls += 1
+            raise win32gui.error(5, 'GetCursorPos', 'CI access-denied injection')
+
+        def refresh_with_denial():
+            app.floating.refresh_hover = refresh
+            cursor = win32gui.GetCursorPos
+            try:
+                win32gui.GetCursorPos = deny_once
+                refresh()
+            finally:
+                win32gui.GetCursorPos = cursor
+            app.events.put(('show', None))
+
+        def recovered():
+            checks['poll_survives_cursor_denial'] = denied_calls > 0 and app.settings_motion.open
+            app.hide()
+            wait_for(lambda: root.state() == 'withdrawn', exercise_native_dispatch,
+                     'Settings did not close after cursor-denial check')
+
+        # The already-running timer must consume this once, then process the
+        # queued settings command on its next tick. No extra poll loop is added.
+        app.floating.refresh_hover = refresh_with_denial
+        wait_for(lambda: root.state() == 'normal', recovered,
+                 'Polling stopped after access-denied cursor inspection')
 
     def exercise_appearance():
         measurements['idle_working_set_mib'] = round(win32process.GetProcessMemoryInfo(win32api.GetCurrentProcess())['WorkingSetSize'] / 2**20, 1)
@@ -106,7 +211,7 @@ def run_checks(root, app, result_path):
                 control.opacity == GLASS_ALPHA
                 and win32gui.GetWindowRect(control.hwnd) == initial_rect
             )
-            exercise_native_dispatch()
+            exercise_cursor_denial()
 
         sample()
 
@@ -168,14 +273,16 @@ def run_checks(root, app, result_path):
 
     def check_background_recording():
         checks['model_loads_when_recording_begins'] = bool(app.session.process and app.session.process.is_alive())
-        checks['record_button_stays_visible'] = app.state == 'recording' and not win32gui.IsIconic(app.floating.hwnd)
+        checks['record_button_stays_visible'] = app.state == 'recording' and app.floating.is_shown()
         checks['record_button_does_not_move'] = win32gui.GetWindowRect(app.floating.hwnd) == app._test_recording_position
         checks['drag_while_recording_moves_without_stopping'] = drag_microphone()
         win32gui.SendMessage(app.floating.hwnd, win32con.WM_SYSCOMMAND, win32con.SC_MINIMIZE, 0)
         root.after(220, guard(check_minimize))
 
     def check_minimize():
-        checks['one_icon_action_hides_button'] = bool(win32gui.IsIconic(app.floating.hwnd))
+        checks['hide_removes_window_without_minimizing'] = not win32gui.IsWindowVisible(app.floating.hwnd) and not win32gui.IsIconic(app.floating.hwnd)
+        style = win32gui.GetWindowLong(app.floating.hwnd, win32con.GWL_EXSTYLE)
+        checks['floating_has_no_taskbar_button'] = bool(style & win32con.WS_EX_TOOLWINDOW) and not bool(style & win32con.WS_EX_APPWINDOW)
         checks['explicit_hide_preserves_recording'] = app.state == 'recording'
         point = win32gui.GetCursorPos()
         app._test_show_at = app.floating.show_at
@@ -191,7 +298,7 @@ def run_checks(root, app, result_path):
 
     def check_summon():
         checks['summon_preserves_recording'] = app.state == 'recording'
-        checks['summon_restores_button_only'] = not win32gui.IsIconic(app.floating.hwnd) and root.state() == 'withdrawn'
+        checks['summon_restores_button_only'] = app.floating.is_shown() and root.state() == 'withdrawn'
         app.floating.show_at = app._test_show_at
         cursor = measurements['summon_cursor']
         action = win32gui.GetWindowRect(app.floating.button)
@@ -249,7 +356,7 @@ def run_checks(root, app, result_path):
         finally:
             handle.Close()
         checks['dictation_still_works'] = bool(app.last_text)
-        checks['finished_button_stays_visible'] = not win32gui.IsIconic(app.floating.hwnd)
+        checks['finished_button_stays_visible'] = app.floating.is_shown()
         checks['finished_button_does_not_move'] = win32gui.GetWindowRect(app.floating.hwnd) == app._test_reveal_position
         checks['named_menu_button_visible'] = (bool(win32gui.IsWindowVisible(app.floating.menu_button))
                                                and win32gui.GetWindowText(app.floating.menu_button) == 'Открыть меню')
@@ -351,7 +458,7 @@ def run_checks(root, app, result_path):
             frames.frombytes(source.readframes(source.getframerate()))
         audio = array('f', (v / 32768 for v in frames)).tobytes()
         recorder = app.recorder
-        app.recorder = SimpleNamespace(start=lambda device: None, stop=lambda: audio, stream=None, overflow=False, rate=16000)
+        app.recorder = synthetic_recorder(audio)
         app.test_audio = None
         original_finish = app.finish
         trials = [('cold', 1000), ('warm', 1000)] * 3 + [('immediate', 0)]
@@ -377,9 +484,9 @@ def run_checks(root, app, result_path):
                     timings.append({'model': kind, 'stop_to_text_ms': round((time.perf_counter()-start)*1000)})
                     recognized.append(text)
                     root.after_idle(guard(lambda: run(index+1)))
-                app.finish = received
+                app.finish = guard(received)
                 app.toggle()
             root.after(head_start, guard(stop))
         run(0)
 
-    wait_ready(guard(exercise_appearance))
+    wait_ready(guard(exercise_tray_left_click))

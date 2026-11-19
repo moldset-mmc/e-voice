@@ -41,7 +41,7 @@ class TimeoutPolicyTests(unittest.TestCase):
             def join(self, _): pass
             def close(self): pass
 
-        session = RecognitionSession.__new__(RecognitionSession)
+        session = RecognitionSession('unused-model-directory')
         process = Proc()
         session.connection, session.process = Pipe(), process
         with self.assertRaisesRegex(RuntimeError, 'не ответило'):

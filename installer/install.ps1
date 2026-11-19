@@ -1,7 +1,7 @@
 # Install the public Windows release for the current user. No elevation or Python required.
-param([string]$FromDirectory)
+param([string]$FromDirectory, [string]$LogPath)
 $ErrorActionPreference = 'Stop'
-$release = 'https://github.com/moldset-mmc/e-voice/releases/download/v1.1.2'
+$release = 'https://github.com/moldset-mmc/e-voice/releases/download/v1.1.3'
 $name = 'E-Voice-Setup-x64.exe'
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'E Voice requires 64-bit Windows.' }
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('e-voice-' + [guid]::NewGuid().ToString('N'))
@@ -20,7 +20,13 @@ try {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash -ne $expected.Substring(0, 64)) {
         throw 'The downloaded installer does not match the published checksum.'
     }
-    $result = Start-Process -FilePath $file -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -Wait -PassThru
+    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+    if ($LogPath) {
+        $LogPath = [IO.Path]::GetFullPath($LogPath)
+        $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath)
+        $arguments += ' /LOG="' + $LogPath + '"'
+    }
+    $result = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru
     if ($result.ExitCode -ne 0) { throw "Setup exited with code $($result.ExitCode). Close E Voice before updating." }
     Write-Output 'E Voice is installed. Open it from the Start menu.'
 } finally {

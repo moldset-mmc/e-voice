@@ -44,6 +44,7 @@ jobs:
         shell: pwsh
         run: |
           $compiler = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" | Select-Object -Last 1
+          if (-not $compiler) { throw 'Inno Setup compiler is missing from the runner.' }
           python build_release.py --iscc $compiler.FullName
       - if: runner.os != 'Windows'
         run: python build_release.py
@@ -66,24 +67,38 @@ jobs:
           sh installer/install.sh --from dist
           sandbox-exec -p '(version 1)(allow default)(deny network*)' "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice" --transcribe tests/fixtures/russian-example.wav --output build/qa-offline.json
           python tools/check_install.py "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice"
-      - if: runner.os == 'Windows'
+      - name: Install Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\installer\install.ps1 -FromDirectory dist -LogPath "$PWD\build\windows-qa\setup.log"
+      - name: Check installed Windows offline and shutdown lifecycle
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          .\installer\install.ps1 -FromDirectory dist
           $exe = "$env:LOCALAPPDATA\Programs\E Voice\EVoice.exe"
           New-NetFirewallRule -DisplayName 'E Voice offline CI' -Direction Outbound -Action Block -Program $exe -ErrorAction Stop | Out-Null
           try {
-            python tools/check_install.py $exe
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            python installer/check_windows.py $exe
+            if ($LASTEXITCODE) { throw "Installed Windows QA failed with exit code $LASTEXITCODE" }
             Copy-Item -LiteralPath 'build/qa-speech.json' -Destination 'build/qa-offline.json'
           } finally {
             Remove-NetFirewallRule -DisplayName 'E Voice offline CI'
           }
       - shell: bash
         run: python -c "import json; assert 'похвал' in json.load(open('build/qa-offline.json',encoding='utf-8'))['text'].lower()"
+      - name: Preserve platform QA reports and Windows diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa-${{ matrix.asset }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build/qa-*.json
+            build/windows-qa/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ${{ matrix.asset }}
+          name: packages-${{ matrix.asset }}
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
@@ -92,9 +107,8 @@ jobs:
             dist/*.deb
             dist/*.tar.gz
             dist/E-Voice-Setup-x64.exe
-            build/qa-*.json
   release:
-    needs: native
+    needs: [lint, native, windows-arm-compatibility]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
     permissions:
@@ -106,16 +120,16 @@ jobs:
         with: {python-version: '3.14.10'}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: {path: package}
-      - shell: bash
-        run: |
-          mkdir -p release
-          find package -type f \( -name '*.exe' -o -name '*.pkg' -o -name '*.deb' -o -name '*.tar.gz' \) -exec cp {} release/ \;
-          find package -type f -name 'qa-*.json' -exec cp {} release/ \;
-          python tools/checksums.py release
+      - name: Validate complete release matrix without overwriting platform evidence
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python build_release.py --collect-artifacts package --release-directory release --release-tag "$RELEASE_TAG"
       - env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
-        run: gh release create "${{ github.ref_name }}" release/* --title "${{ github.ref_name }}" --generate-notes
+        run: gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --generate-notes
   windows-arm-compatibility:
     needs: native
     runs-on: windows-11-arm
@@ -124,11 +138,35 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with: {persist-credentials: false}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with: {name: Windows-x64, path: package}
-      - shell: pwsh
+        with: {name: packages-Windows-x64, path: package}
+      - name: Check x64 package under Windows ARM emulation
+        shell: pwsh
         run: |
-          $setup = Start-Process -Wait -PassThru 'package/dist/E-Voice-Setup-x64.exe' -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
-          if ($setup.ExitCode) { exit $setup.ExitCode }
-          $exe = "$env:LOCALAPPDATA\Programs\E Voice\EVoice.exe"
-          $run = Start-Process -Wait -PassThru $exe -ArgumentList '--transcribe tests/fixtures/russian-example.wav --output transcript.json'
-          if ($run.ExitCode -or ((Get-Content -Raw transcript.json | ConvertFrom-Json).text -notmatch 'похвал')) { throw 'Failed x64 emulation speech check.' }
+          New-Item -ItemType Directory -Force build/windows-qa | Out-Null
+          $report = @{ passed = $false }
+          try {
+            $setupLog = "$PWD\build\windows-qa\setup-arm64.log"
+            $setup = Start-Process -PassThru 'package/E-Voice-Setup-x64.exe' -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$setupLog`""
+            if (-not $setup.WaitForExit(180000)) { Stop-Process -Id $setup.Id -Force; throw 'ARM installer timed out.' }
+            if ($setup.ExitCode) { throw "ARM installer exited with code $($setup.ExitCode)" }
+            $exe = "$env:LOCALAPPDATA\Programs\E Voice\EVoice.exe"
+            $run = Start-Process -PassThru $exe -ArgumentList '--transcribe tests/fixtures/russian-example.wav --output build/qa-arm-speech.json'
+            if (-not $run.WaitForExit(200000)) { Stop-Process -Id $run.Id -Force; throw 'ARM speech check timed out.' }
+            if ($run.ExitCode -or ((Get-Content -Raw build/qa-arm-speech.json | ConvertFrom-Json).text -notmatch 'похвал')) { throw 'Failed x64 emulation speech check.' }
+            $report.passed = $true
+          } catch {
+            $report.error = $_.ToString()
+            throw
+          } finally {
+            $report | ConvertTo-Json | Set-Content -Encoding utf8 build/qa-arm64.json
+          }
+      - name: Preserve Windows ARM evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa-Windows-arm64
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            build/qa-*.json
+            build/windows-qa/

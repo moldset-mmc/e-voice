@@ -1,5 +1,6 @@
 """Build E Voice and its single offline Windows installer."""
 import argparse
+import json
 from importlib import metadata
 from pathlib import Path
 import os
@@ -136,12 +137,76 @@ def linux_library_notices():
     (destination / 'packages.tsv').write_text('\n'.join(records) + '\n', encoding='utf-8')
 
 
+RELEASE_PACKAGES = {
+    'Windows-x64': ('E-Voice-Setup-x64.exe',),
+    'Linux-amd64': ('E-Voice-Linux-amd64.deb', 'E-Voice-Linux-amd64.tar.gz'),
+    'Linux-arm64': ('E-Voice-Linux-arm64.deb', 'E-Voice-Linux-arm64.tar.gz'),
+    'macOS-x86_64': ('E-Voice-macOS-x86_64.pkg',),
+    'macOS-arm64': ('E-Voice-macOS-arm64.pkg',),
+}
+
+
+def collect_release_artifacts(source, destination, version, tag):
+    """Validate the full matrix before copying; never silently overwrite QA JSON."""
+    if tag != f'v{version}':
+        raise ValueError(f'Release tag {tag!r} does not match VERSION {version!r}')
+    if destination.exists() and any(destination.iterdir()):
+        raise ValueError('Release destination must be empty')
+    copies = {}
+    for asset, names in RELEASE_PACKAGES.items():
+        folder = source / f'packages-{asset}'
+        actual = {p.name for p in folder.iterdir() if p.is_file()} if folder.is_dir() else set()
+        if actual != set(names):
+            raise ValueError(f'{asset}: expected packages {names}, found {sorted(actual)}')
+        for name in names:
+            package = folder / name
+            if not package.stat().st_size:
+                raise ValueError(f'Empty release package: {package}')
+            copies[name] = package
+
+    for asset in (*RELEASE_PACKAGES, 'Windows-arm64'):
+        folder = source / f'qa-{asset}'
+        reports = {}
+        for report in folder.rglob('qa-*.json'):
+            if report.name in reports:
+                raise ValueError(f'Duplicate QA report for {asset}: {report.name}')
+            reports[report.name] = report
+        required = {'qa-arm64.json'} if asset == 'Windows-arm64' else {'qa-offline.json', 'qa-interaction.json'}
+        if asset == 'Windows-x64':
+            required.add('qa-windows-lifecycle.json')
+        if not required.issubset(reports):
+            raise ValueError(f'{asset}: missing QA reports {sorted(required - reports.keys())}')
+        for name, path in reports.items():
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if name in ('qa-interaction.json', 'qa-windows-lifecycle.json', 'qa-arm64.json'):
+                if data.get('passed') is not True:
+                    raise ValueError(f'{asset}: failed QA report {name}')
+            elif name in ('qa-offline.json', 'qa-speech.json', 'qa-speech-48k.json'):
+                text = data.get('text', '')
+                if not isinstance(text, str) or 'похвал' not in text.casefold():
+                    raise ValueError(f'{asset}: invalid speech report {name}')
+            # Prefix each report with its architecture, preserving every platform's evidence.
+            copies[f'qa-{asset}-{name.removeprefix("qa-")}'] = path
+
+    destination.mkdir(parents=True, exist_ok=True)
+    for name, source_path in copies.items():
+        shutil.copy2(source_path, destination / name)
+    from tools.checksums import write
+    write(destination)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--iscc', type=Path, help='Path to the Inno Setup 7 compiler')
     parser.add_argument('--offline', action='store_true', help='Use existing verified model files')
+    parser.add_argument('--collect-artifacts', type=Path, help='Assemble downloaded, validated CI artifacts')
+    parser.add_argument('--release-directory', type=Path, default=Path('release'))
+    parser.add_argument('--release-tag', help='Must exactly match the VERSION file when collecting artifacts')
     args = parser.parse_args()
     version = (ROOT / 'VERSION').read_text(encoding='ascii').strip()
+    if args.collect_artifacts:
+        collect_release_artifacts(args.collect_artifacts, args.release_directory, version, args.release_tag)
+        return
     if sys.platform in ('darwin', 'linux'):
         prepare(args.offline)
         build_unix(version)

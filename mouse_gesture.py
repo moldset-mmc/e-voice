@@ -63,6 +63,7 @@ class MouseGesture:
     def __init__(self, events):
         self.events = events
         self.started = threading.Event()
+        self.stopping = threading.Event()
         self.thread_id = None
         self.error = None
         self.hook = None
@@ -72,19 +73,24 @@ class MouseGesture:
                                     distance=max(12, round(12 * user32.GetDpiForSystem() / 96)))
         self.callback = HOOK_PROC(self.on_mouse)
         self.worker = threading.Thread(target=self.process_events, name='mouse-gesture-detection', daemon=True)
-        self.worker.start()
         self.thread = threading.Thread(target=self.run, name='mouse-gesture', daemon=True)
-        self.thread.start()
-        if not self.started.wait(3):
-            raise RuntimeError('Не удалось запустить вызов кнопки мышью.')
-        if self.error:
-            raise RuntimeError(self.error)
+        try:
+            self.worker.start()
+            self.thread.start()
+            if not self.started.wait(3):
+                raise RuntimeError('Не удалось запустить вызов кнопки мышью.')
+            if self.error:
+                raise RuntimeError(self.error)
+        except BaseException:
+            # A failed constructor has no owner left to close its threads.
+            self.close()
+            raise
 
     def on_mouse(self, code, message, data):
         # The hook must return immediately. Window lookup and gesture detection
         # happen outside it so a slow application cannot time out this hook.
         try:
-            if code >= 0 and message in (0x0200, 0x0201, 0x0202, 0x0204, 0x0207, 0x020A):
+            if not self.stopping.is_set() and code >= 0 and message in (0x0200, 0x0201, 0x0202, 0x0204, 0x0207, 0x020A):
                 if message in (0x0201, 0x0202):
                     self.left_down = message == 0x0201
                 if message != 0x0200 or self.left_down:
@@ -95,7 +101,7 @@ class MouseGesture:
         return user32.CallNextHookEx(None, code, message, data)
 
     def process_events(self):
-        while True:
+        while not self.stopping.is_set():
             item = self.raw_events.get()
             if item is None:
                 return
@@ -119,26 +125,41 @@ class MouseGesture:
                 self.detector.reset()
 
     def run(self):
-        self.thread_id = kernel32.GetCurrentThreadId()
-        message = wintypes.MSG()
-        user32.PeekMessageW(ctypes.byref(message), None, 0, 0, 0)
-        self.hook = user32.SetWindowsHookExW(14, self.callback, None, 0)  # WH_MOUSE_LL
-        if not self.hook:
-            self.error = 'Windows не разрешила вызов кнопки тройным щелчком.'
-            self.started.set()
-            return
-        self.started.set()
         try:
-            while user32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
+            self.thread_id = kernel32.GetCurrentThreadId()
+            message = wintypes.MSG()
+            user32.PeekMessageW(ctypes.byref(message), None, 0, 0, 0)
+            # close() may run before this thread has even created its message queue.
+            if self.stopping.is_set():
+                return
+            self.hook = user32.SetWindowsHookExW(14, self.callback, None, 0)  # WH_MOUSE_LL
+            if not self.hook:
+                self.error = 'Windows не разрешила вызов кнопки тройным щелчком.'
+                return
+            self.started.set()
+            # Installation can finish after the constructor timed out. In that case
+            # skip the message loop and unhook in finally, even if WM_QUIT was lost.
+            while not self.stopping.is_set() and user32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
                 user32.TranslateMessage(ctypes.byref(message))
                 user32.DispatchMessageW(ctypes.byref(message))
+        except Exception as exc:
+            self.error = str(exc)
         finally:
-            user32.UnhookWindowsHookEx(self.hook)
-            self.hook = None
+            try:
+                if self.hook:
+                    user32.UnhookWindowsHookEx(self.hook)
+            finally:
+                self.hook = None
+                self.stopping.set()
+                self.raw_events.put(None)
+                self.started.set()
 
     def close(self):
-        if self.thread.is_alive() and self.thread_id:
-            user32.PostThreadMessageW(self.thread_id, 0x0012, 0, 0)
+        self.stopping.set()
+        self.raw_events.put(None)  # Stop detection immediately, not after the hook join.
+        if self.thread.is_alive():
+            if self.thread_id:
+                user32.PostThreadMessageW(self.thread_id, 0x0012, 0, 0)
             self.thread.join(2)
-        self.raw_events.put(None)
-        self.worker.join(2)
+        if self.worker.is_alive():
+            self.worker.join(2)

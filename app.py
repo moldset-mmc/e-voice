@@ -29,7 +29,7 @@ import win32gui
 from speech_engine import Recorder, SpeechEngine
 from windows_io import (DEFAULT_HOTKEY, KEY_NAMES, MODIFIER_KEY_CODES, GlobalHotkey, activate_target,
                         choose_target, copy_text, foreground, hotkey_label, insert_text, kernel32,
-                        modifiers_down, over_taskbar, parse_hotkey, pressed_modifier_flags)
+                        modifiers_down, parse_hotkey, pressed_modifier_flags)
 from floating_control import CLASS_NAME, ICON_PATH, RESTORE_MESSAGE, FloatingControl, fit_to_work_area
 from glass_theme import (ACCENT, BORDER, MENU_ALPHA, ON_DARK, SECONDARY, SETTINGS_ALPHA, SURFACE, TEXT,
                          PopupMotion, configure_settings, glass_frame, icon_image)
@@ -44,12 +44,19 @@ BASE = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__
 DATA_DIR = Path(os.environ.get('EVOICE_DATA_DIR') or (Path(os.environ.get('LOCALAPPDATA', BASE)) / 'E Voice'))
 _diagnostic_file = None
 HOTKEY_HINT = 'Нажми горячую клавишу ещё раз, чтобы остановить запись.'
+WORKER_EXIT_TIMEOUT = 3.0
 
 
 class VoiceTray(pystray.Icon):
     def _on_notify(self, wparam, lparam):
         if lparam in (win32con.WM_RBUTTONUP, win32con.WM_CONTEXTMENU):
-            self.open_glass_menu(win32gui.GetCursorPos())
+            try:
+                point = win32gui.GetCursorPos()
+            except win32gui.error as exc:
+                if exc.winerror != 5:
+                    raise
+                return 0  # The input desktop may be temporarily inaccessible.
+            self.open_glass_menu(point)
             return 0
         return super()._on_notify(wparam, lparam)
 
@@ -67,6 +74,25 @@ def enable_diagnostics():
             sys.stderr = _diagnostic_file
     except OSError:
         pass
+
+
+def find_instance_window(test_pid=None):
+    if test_pid is None:
+        return win32gui.FindWindow(CLASS_NAME, None)
+    from win32process import GetWindowThreadProcessId
+    windows = []
+
+    def inspect(hwnd, _):
+        try:
+            if win32gui.GetClassName(hwnd) == CLASS_NAME and GetWindowThreadProcessId(hwnd)[1] == test_pid:
+                windows.append(hwnd)
+        except win32gui.error as exc:
+            if exc.winerror not in (5, 1400):  # Inaccessible or already destroyed.
+                raise
+        return True
+
+    win32gui.EnumWindows(inspect, None)
+    return windows[0] if windows else 0
 
 
 class Application:
@@ -90,7 +116,6 @@ class Application:
         self.mouse_gesture = None
         self.float_reveal = 0
         self.last_float_raise = 0
-        self.ignore_icon_until = 0
         self.tray = None
         self.closing = False
         self.worker = None
@@ -105,17 +130,21 @@ class Application:
             position = None
         self.floating = FloatingControl(self.events, position, schedule=root.after)
         if not self.show_float.get():
-            self.floating.finish_minimize()
+            self.floating.finish_hide()
         elif position:
             self.floating.visible(True)
         else:
-            self.floating.show_at()
-        try:
-            self.mouse_gesture = MouseGesture(self.events)
-        except Exception as exc:
-            self.status.set(str(exc))
+            try:
+                self.floating.show_at()
+            except win32gui.error as exc:
+                if exc.winerror != 5:
+                    raise
+                # Use the constructor's monitor-safe position without querying
+                # the pointer when another input desktop owns it.
+                self.floating.visible(True)
         root.after(50, self.poll)
         self.ready('Готов к записи')
+        self.configure_mouse_gesture()
 
     def make_window(self):
         root = self.root
@@ -187,13 +216,13 @@ class Application:
 
         ttk.Label(frame, text='Поведение', style='Section.Glass.TLabel').pack(anchor='w', pady=(p(15), p(3)))
         self.autopaste = tk.BooleanVar(value=self.config.get('autopaste', True))
-        self.show_float = tk.BooleanVar(value=self.config.get('show_float', True))
-        self.summon_enabled = tk.BooleanVar(value=self.config.get('triple_click', True))
+        self.show_float = tk.BooleanVar(value=self.config.get('show_float', False))
+        self.summon_enabled = tk.BooleanVar(value=self.config.get('triple_click', False))
         self.auto_hide_recording = tk.BooleanVar(value=self.config.get('auto_hide_recording', False))
         for label, variable, action in (
             ('Вставлять текст у курсора', self.autopaste, self.save_settings),
             ('Плавающая кнопка', self.show_float, self.toggle_floating),
-            ('Вызывать тройным щелчком', self.summon_enabled, self.save_settings),
+            ('Вызывать тройным щелчком', self.summon_enabled, self.toggle_mouse_gesture),
             ('Скрывать кнопку после начала записи', self.auto_hide_recording, self.save_settings),
         ):
             switch = ttk.Checkbutton(frame, text=label, variable=variable, command=action,
@@ -244,9 +273,10 @@ class Application:
         self.open_choices('Микрофон', choices, self.device_var.get(), anchor, anchor[1] + box.winfo_height(), 320)
 
     def show_tray_menu(self, point):
-        choices = [('Показать кнопку', self.reveal_floating), ('Настройки', self.show_settings),
+        floating_action = ('Скрыть кнопку', self.minimize_floating) if self.floating.is_shown() else ('Показать кнопку', self.reveal_floating)
+        choices = [('Настройки', self.show_settings), floating_action,
                    ('Остановить запись' if self.state == 'recording' else 'Начать запись', self.toggle),
-                   ('Свернуть кнопку', self.minimize_floating), ('Выход', self.exit)]
+                   ('Выход', self.exit)]
         self.open_choices('E Voice', choices, None, point, point[1], 200)
 
     def toggle_quick_menu(self):
@@ -279,7 +309,7 @@ class Application:
             if destination is None:
                 self.menu_first = item
         ttk.Separator(surface, style='Glass.TSeparator').pack(fill='x', padx=p(8), pady=(p(1), p(4)))
-        ttk.Button(surface, text='Свернуть кнопку', style='Menu.Glass.TButton',
+        ttk.Button(surface, text='Скрыть кнопку', style='Menu.Glass.TButton',
                    command=self.minimize_floating).pack(fill='x')
         ttk.Label(surface, text='Микрофон можно перетащить.', style='Hint.Glass.TLabel',
                   wraplength=p(162)).pack(anchor='w', padx=p(4), pady=(p(6), 0))
@@ -335,6 +365,21 @@ class Application:
 
     def save_floating_position(self, position):
         self.config['floating_position'] = list(position)
+        self.save_settings()
+
+    def configure_mouse_gesture(self):
+        if self.summon_enabled.get() and self.mouse_gesture is None:
+            try:
+                self.mouse_gesture = MouseGesture(self.events)
+            except Exception as exc:
+                self.summon_enabled.set(False)
+                self.status.set(str(exc))
+        elif not self.summon_enabled.get() and self.mouse_gesture is not None:
+            self.mouse_gesture.close()
+            self.mouse_gesture = None
+
+    def toggle_mouse_gesture(self):
+        self.configure_mouse_gesture()
         self.save_settings()
 
     def toggle_floating(self):
@@ -408,7 +453,7 @@ class Application:
         def action(name):
             return lambda *args: self.events.put((name, None))
         self.tray = VoiceTray('EVoice', icon_image(), 'E Voice — подготовка', menu=pystray.Menu(
-            pystray.MenuItem('Показать или свернуть', action('icon_float'), default=True, visible=False)))
+            pystray.MenuItem('Настройки', action('show'), default=True, visible=False)))
         self.tray.open_glass_menu = lambda point: self.events.put(('tray_menu', point))
         threading.Thread(target=self.tray.run, daemon=True).start()
 
@@ -420,7 +465,22 @@ class Application:
     def poll(self):
         if self.closing:
             return
-        self.last_target = choose_target(foreground(), self.last_target, os.getpid())
+        try:
+            self.poll_once()
+        finally:
+            # Tk reports callback errors, but does not restart a broken timer.
+            # Keep servicing the tray, hotkey, recording limit and worker results.
+            if not self.closing:
+                self.root.after(50, self.poll)
+
+    def poll_once(self):
+        try:
+            self.last_target = choose_target(foreground(), self.last_target, os.getpid())
+        except win32gui.error as exc:
+            if exc.winerror != 5:
+                raise
+            # Lock/UAC desktops must not block queued stop/exit commands.
+            self.last_target = None
         for _ in range(100):
             try:
                 name, value = self.events.get_nowait()
@@ -450,15 +510,7 @@ class Application:
             elif name == 'show_float':
                 self.reveal_floating()
             elif name == 'summon_float' and self.summon_enabled.get():
-                if over_taskbar(value):
-                    self.ignore_icon_until = time.monotonic() + .3
                 self.reveal_floating(value)
-            elif name == 'icon_float' and time.monotonic() >= self.ignore_icon_until:
-                show = not self.floating.is_shown() if value is None else value
-                if show:
-                    self.reveal_floating()
-                elif self.floating.is_shown():
-                    self.minimize_floating()
             elif name == 'hide_float':
                 self.minimize_floating()
             elif name == 'fit_float':
@@ -473,7 +525,6 @@ class Application:
         if not popup_open and time.monotonic() - self.last_float_raise >= 0.25:
             self.floating.keep_on_top()
             self.last_float_raise = time.monotonic()
-        self.root.after(50, self.poll)
 
     def ready(self, message):
         self.state = 'ready'
@@ -492,6 +543,8 @@ class Application:
             self.tray.title = 'E Voice — готово'
 
     def toggle(self):
+        if self.closing:
+            return
         if self.state == 'ready':
             self.take += 1
             current = foreground()
@@ -595,26 +648,53 @@ class Application:
         if self.closing:
             return
         self.closing = True
-        self.session.close()
-        if self.recorder.stream is not None:
+        deadline = time.monotonic() + WORKER_EXIT_TIMEOUT
+
+        def report_failure(name, error):
             try:
-                self.recorder.stop()
+                output = _diagnostic_file or sys.stderr
+                print('E Voice shutdown: ' + name, file=output)
+                traceback.print_exception(type(error), error, error.__traceback__, file=output)
             except Exception:
+                # A closed/full diagnostic stream must not prevent shutdown either.
                 pass
+
+        def cleanup(name, action):
+            try:
+                action()
+                return True
+            except Exception as exc:
+                report_failure(name, exc)
+                return False
+
+        # Stop capturing first. Every resource gets its own cleanup attempt, even
+        # when the model, an input hook or a native window fails to close.
+        if self.recorder.stream is not None:
+            cleanup('microphone', self.recorder.stop)
+        cleanup('recognizer', self.session.close)
         if self.hotkey:
-            self.hotkey.close()
+            cleanup('hotkey', self.hotkey.close)
         if self.mouse_gesture:
-            self.mouse_gesture.close()
+            cleanup('mouse hook', self.mouse_gesture.close)
         if self.tray:
-            self.tray.stop()
+            cleanup('tray', self.tray.stop)
         if self.floating:
-            self.floating.close()
-        self.status.set('Завершаю работу…')
+            cleanup('floating window', self.floating.close)
+        cleanup('status', lambda: self.status.set('Завершаю работу…'))
+
         def finish_exit():
-            if self.worker is not None and self.worker.is_alive():
-                self.root.after(50, finish_exit)
-            else:
-                self.root.destroy()
+            try:
+                if self.worker is not None and self.worker.is_alive():
+                    if time.monotonic() < deadline:
+                        self.root.after(50, finish_exit)
+                        return
+                    # The daemon thread may be stuck in pipe/native I/O. Model
+                    # teardown was attempted above; never keep Tk alive forever.
+                    report_failure('dictation worker', RuntimeError('Worker did not stop before the shutdown deadline'))
+            except Exception as exc:
+                report_failure('waiting for dictation worker', exc)
+            if not cleanup('Tk window', self.root.destroy):
+                cleanup('Tk event loop', self.root.quit)
         finish_exit()
 
 
@@ -646,27 +726,25 @@ def main():
             no_activate = bool(win32gui.GetWindowLong(control.hwnd, win32con.GWL_EXSTYLE) & win32con.WS_EX_NOACTIVATE)
             no_mouse_activation = win32gui.SendMessage(control.hwnd, win32con.WM_MOUSEACTIVATE, 0, 0) == win32con.MA_NOACTIVATE
             focus_preserved = foreground() == before
-            taskbar_enabled = bool(style & win32con.WS_EX_APPWINDOW) and not bool(style & win32con.WS_EX_TOOLWINDOW)
+            taskbar_hidden = bool(style & win32con.WS_EX_TOOLWINDOW) and not bool(style & win32con.WS_EX_APPWINDOW)
             control.visible(False)
-            minimized_with_taskbar = bool(win32gui.IsIconic(control.hwnd) and win32gui.IsWindowVisible(control.hwnd))
-            win32gui.SendMessage(control.hwnd, win32con.WM_SYSCOMMAND, win32con.SC_RESTORE, 0)
-            taskbar_restore_requested = ('icon_float', True) in list(events.queue)
+            hidden_not_minimized = not win32gui.IsWindowVisible(control.hwnd) and not win32gui.IsIconic(control.hwnd)
             control.visible(True)
             restored = bool(win32gui.IsWindowVisible(control.hwnd) and not win32gui.IsIconic(control.hwnd))
             restore_preserved_focus = foreground() == before
             win32gui.SendMessage(control.hwnd, win32con.WM_CLOSE, 0, 0)
-            close_requests_minimize = ('hide_float', None) in list(events.queue) and bool(win32gui.IsWindow(control.hwnd))
+            close_requests_hide = ('hide_float', None) in list(events.queue) and bool(win32gui.IsWindow(control.hwnd))
             win32gui.SendMessage(control.hwnd, RESTORE_MESSAGE, 0, 0)
-            relaunch_restore_requested = ('show_float', None) in list(events.queue)
+            relaunch_opens_settings = ('show', None) in list(events.queue)
             control.visible(False)
             engine = SpeechEngine(BASE / 'models' / 'gigaam-v3')
             result = engine.transcribe_file(args.test_audio) if args.test_audio else ''
             checks = {'gui_ready': True, 'settings_hidden': root.state() == 'withdrawn', 'floating_ready': True,
                       'no_activate': no_activate, 'no_mouse_activation': no_mouse_activation,
-                      'focus_preserved_on_show': focus_preserved, 'taskbar_enabled': taskbar_enabled,
-                      'minimized_with_taskbar': minimized_with_taskbar, 'taskbar_restore_requested': taskbar_restore_requested,
+                      'focus_preserved_on_show': focus_preserved, 'taskbar_hidden': taskbar_hidden,
+                      'hidden_not_minimized': hidden_not_minimized,
                       'restored': restored, 'restore_preserved_focus': restore_preserved_focus,
-                      'close_requests_minimize': close_requests_minimize, 'relaunch_restore_requested': relaunch_restore_requested,
+                      'close_requests_hide': close_requests_hide, 'relaunch_opens_settings': relaunch_opens_settings,
                       'model_ready': True}
             args.smoke_test.write_text(json.dumps({**checks, 'frozen': bool(getattr(sys, 'frozen', False)), 'text': result}, ensure_ascii=False, indent=2), encoding='utf-8')
             if not all(checks.values()):
@@ -680,8 +758,18 @@ def main():
         result = SpeechEngine(BASE / 'models' / 'gigaam-v3').transcribe_file(args.transcribe)
         print(json.dumps({'text': result}, ensure_ascii=False))
         return
-    # UI checks use test audio. They can run beside an existing dictation session.
-    mutex_name = f'Local\\EVoiceTest-{os.getpid()}' if args.interaction_test else 'Local\\LocalVoiceRussianOffline'
+    # UI checks and their second-instance probe share only a test mutex, never
+    # the singleton belonging to the user's normal dictation session.
+    test_instance = os.environ.setdefault('EVOICE_TEST_INSTANCE_ID', str(os.getpid())) if args.interaction_test else None
+    test_pid = None
+    if test_instance is not None:
+        try:
+            test_pid = int(test_instance)
+        except ValueError:
+            parser.error('EVOICE_TEST_INSTANCE_ID must be the positive PID of the test instance')
+        if test_pid <= 0:
+            parser.error('EVOICE_TEST_INSTANCE_ID must be the positive PID of the test instance')
+    mutex_name = f'Local\\EVoiceTest-{test_instance}' if args.interaction_test else 'Local\\LocalVoiceRussianOffline'
     mutex = kernel32.CreateMutexW(None, False, mutex_name)
     if not mutex:
         raise RuntimeError('Не удалось создать блокировку запуска')
@@ -689,12 +777,12 @@ def main():
         kernel32.CloseHandle(mutex)
         import win32gui
         for _ in range(40):
-            existing = win32gui.FindWindow(CLASS_NAME, None)
+            existing = find_instance_window(test_pid)
             if existing:
                 win32gui.PostMessage(existing, RESTORE_MESSAGE, 0, 0)
                 return
             time.sleep(0.05)
-        # The first instance owns startup and shows the orb when its window is ready.
+        # The first instance owns startup; do not create another tray or hook.
         return
     root = tk.Tk()
     root.withdraw()

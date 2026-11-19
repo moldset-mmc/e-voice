@@ -1,0 +1,7 @@
+sherpa-onnx==2.0.1
+sounddevice>=0.5,<0.6
+numpy>=2.3,<3
+pystray>=0.19,<0.20
+pillow>=12,<13
+pywin32>=311
+pyinstaller>=6.16,<7

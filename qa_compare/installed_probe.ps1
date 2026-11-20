@@ -29,9 +29,10 @@ foreach ($case in $cases) {
         $report.bytes = (Get-Item -LiteralPath $installer).Length
         $report.file_version = (Get-Item -LiteralPath $installer).VersionInfo.FileVersion
         if ($actual -ne $case.Hash) { throw 'Public asset differs from pinned GitHub digest; will not execute it.' }
-        if ($report.file_version -ne "$($case.Version).0") { throw 'Unexpected installer file version.' }
-        $args = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$installDir`" /LOG=`"$output/setup.log`""
-        $setup = Start-Process -FilePath $installer -ArgumentList $args -PassThru
+        if ($report.file_version.Trim() -ne "$($case.Version).0") { throw 'Unexpected installer file version.' }
+        $setupArguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$installDir`" /LOG=`"$output/setup.log`""
+        $setup = Start-Process -FilePath $installer -ArgumentList $setupArguments -PassThru
+        $null = $setup.Handle  # Retain the native handle so ExitCode remains available after bounded wait.
         if (-not $setup.WaitForExit(120000)) {
             taskkill.exe /PID $setup.Id /T /F | Out-Null
             throw 'Installer exceeded external 120-second deadline.'

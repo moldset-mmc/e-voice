@@ -5,7 +5,8 @@ import sys
 
 
 def write(directory):
-    packages = sorted(path for path in directory.glob('E-Voice-*') if path.name.endswith(('.exe', '.pkg', '.deb', '.tar.gz')))
+    packages = sorted(path for path in directory.glob('E-Voice-*') if path.name.endswith(
+        ('.exe', '.pkg', '.deb', '.tar.gz', '-Licenses-and-Sources.zip')))
     if not packages:
         raise ValueError('No release packages found')
     lines = []

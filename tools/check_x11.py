@@ -20,6 +20,10 @@ def editor(directory):
     text.focus_force()
     (directory / 'window').write_text(str(text.winfo_id()))
     def read_text():
+        if (directory / 'copy').exists() and not (directory / 'copied').exists():
+            root.clipboard_clear()
+            root.clipboard_append('Новая копия из другого окна')
+            (directory / 'copied').touch()
         content = text.get('1.0', 'end-1c')
         if content:
             (directory / 'result').write_text(content, encoding='utf-8')
@@ -55,9 +59,15 @@ def check():
             target, own = io.target()
             assert target == window.id and not own
             assert not io.paste('другое окно', target+1)
+            io.copy('Исходный буфер')
             assert io.paste('Проверка у курсора. ', target)
             wait_for(lambda: (tmp / 'result').exists())
             assert (tmp / 'result').read_text(encoding='utf-8') == 'Проверка у курсора. '
+            assert io._pending_clipboard is not None
+            (tmp / 'copy').touch()
+            wait_for(lambda: (tmp / 'copied').exists())
+            wait_for(lambda: io._pending_clipboard is None)
+            assert root.clipboard_get() == 'Новая копия из другого окна'
             io.listen('Ctrl + F9', True)
             io.keys.wait()
             io.mouse.wait()

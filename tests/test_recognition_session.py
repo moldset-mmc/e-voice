@@ -1,12 +1,22 @@
-"""Recognizer teardown using fake pipes/processes only; never spawn or load a model."""
+"""Bounded recognizer IPC and teardown, without loading a speech model."""
+import multiprocessing as mp
 import sys
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from recognition_session import RecognitionSession
+
+
+def wait_without_reading(pipe, ready):
+    ready.set()
+    try:
+        time.sleep(10)
+    finally:
+        pipe.close()
 
 
 class FakeProcess:
@@ -208,6 +218,60 @@ class RecognitionCleanupTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertEqual(results, ['text'])
         process.terminate.assert_not_called()
+
+    def test_deadline_covers_header_audio_and_partial_reply_and_allows_retry(self):
+        for stage, test_file in [('send', 'sample.wav'), ('send_bytes', None), ('recv', None)]:
+            with self.subTest(stage=stage):
+                session, process, pipe = self.session()
+                entered, released, exited = threading.Event(), threading.Event(), threading.Event()
+
+                def blocked(*args):
+                    entered.set()
+                    try:
+                        released.wait(3)
+                        raise EOFError
+                    finally:
+                        exited.set()
+
+                getattr(pipe, stage).side_effect = blocked
+                pipe.close.side_effect = released.set
+                try:
+                    with self.assertRaisesRegex(RuntimeError, 'не ответило'):
+                        session.transcribe(b'audio', test_file=test_file, timeout=0.15)
+                    self.assertTrue(entered.is_set())
+                    self.assertTrue(exited.wait(1))
+                    process.terminate.assert_called_once()
+                    session.connection = Mock()
+                    session.connection.recv.return_value = (True, 'следующая запись')
+                    self.assertEqual(session.transcribe(b'next'), 'следующая запись')
+                finally:
+                    released.set()
+
+    def test_old_exchange_cannot_close_replacement_pipe(self):
+        session, process, pipe = self.session()
+        replacement = Mock()
+        session.connection = replacement
+        session.close(expected_connection=pipe)
+        process.terminate.assert_not_called()
+        replacement.close.assert_not_called()
+
+    def test_real_full_pipe_is_released_by_timeout(self):
+        context = mp.get_context('spawn')
+        local, remote = context.Pipe()
+        ready = context.Event()
+        process = context.Process(target=wait_without_reading, args=(remote, ready), daemon=True)
+        session = RecognitionSession('unused')
+        process.start()
+        remote.close()
+        session.connection, session.process = local, process
+        try:
+            self.assertTrue(ready.wait(8))
+            with self.assertRaisesRegex(RuntimeError, 'не ответило'):
+                session.transcribe(bytes(2 * 1024 * 1024), timeout=0.15)
+            self.assertIsNone(session.process)
+            self.assertTrue(local.closed)
+        finally:
+            session.close()
 
 
 if __name__ == '__main__':

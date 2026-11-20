@@ -1,7 +1,7 @@
 # Install the public Windows release for the current user. No elevation or Python required.
-param([string]$FromDirectory, [string]$LogPath)
+param([string]$FromDirectory, [string]$LogPath, [switch]$AcceptRuntimeTerms)
 $ErrorActionPreference = 'Stop'
-$release = 'https://github.com/moldset-mmc/e-voice/releases/download/v1.1.3'
+$release = 'https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4'
 $name = 'E-Voice-Setup-x64.exe'
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'E Voice requires 64-bit Windows.' }
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('e-voice-' + [guid]::NewGuid().ToString('N'))
@@ -20,7 +20,8 @@ try {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash -ne $expected.Substring(0, 64)) {
         throw 'The downloaded installer does not match the published checksum.'
     }
-    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+    $arguments = '/NORESTART'
+    if ($AcceptRuntimeTerms) { $arguments += ' /VERYSILENT /SUPPRESSMSGBOXES /ACCEPTRUNTIMETERMS=1' }
     if ($LogPath) {
         $LogPath = [IO.Path]::GetFullPath($LogPath)
         $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath)

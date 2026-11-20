@@ -70,7 +70,8 @@ jobs:
       - name: Verify and test unchanged published Windows installers
         if: ${{ !cancelled() }}
         shell: pwsh
-        run: .\qa_compare\installed_probe.ps1
+        # Owner explicitly accepted supplemental Microsoft terms for this isolated comparison, 2026-11-20.
+        run: .\qa_compare\installed_probe.ps1 -AcceptRuntimeTerms
       - name: Preserve reports even when a scenario fails
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

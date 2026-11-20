@@ -23,4 +23,6 @@ Both scripts use a launch gate: no application import or recognizer spawn before
 
 `installed_probe.ps1` downloads the unmodified public Windows installers on the hosted runner, verifies pinned SHA-256 and FileVersion, installs to separate directories, blocks app outbound networking, then uses the same existing `installer/check_windows.py` for both versions. This checks Russian WAV speech, 48 kHz resampling, tray/UI interactions, normal exit and absence of surviving processes.
 
+The owner explicitly accepted the supplemental Microsoft runtime terms on 2026-11-20 for this isolated CI comparison only. The installer probe requires an explicit `-AcceptRuntimeTerms` switch to send `/ACCEPTRUNTIMETERMS=1`; it does not silently opt in by default. This is not permission to install the application on the owner's computer.
+
 These binary checks do NOT inject recognizer faults. Source fault results do NOT prove the packaged binary's injected-fault behavior. No physical microphone, owner's input devices, or prolonged soak are tested. A green workflow means evidence collection succeeded; consult individual outcomes before claiming product stability.

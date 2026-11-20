@@ -1,4 +1,5 @@
 # Never execute on an owner's workstation. Only disposable hosted Windows.
+param([switch]$AcceptRuntimeTerms)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'Installed QA requires GitHub-hosted Windows.'
@@ -31,6 +32,8 @@ foreach ($case in $cases) {
         if ($actual -ne $case.Hash) { throw 'Public asset differs from pinned GitHub digest; will not execute it.' }
         if ($report.file_version.Trim() -ne "$($case.Version).0") { throw 'Unexpected installer file version.' }
         $setupArguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$installDir`" /LOG=`"$output/setup.log`""
+        $report.runtime_terms_accepted = [bool]$AcceptRuntimeTerms
+        if ($AcceptRuntimeTerms) { $setupArguments += ' /ACCEPTRUNTIMETERMS=1' }
         $setup = Start-Process -FilePath $installer -ArgumentList $setupArguments -PassThru
         $null = $setup.Handle  # Retain the native handle so ExitCode remains available after bounded wait.
         if (-not $setup.WaitForExit(120000)) {

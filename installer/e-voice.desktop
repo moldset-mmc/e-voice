@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=E Voice
-Comment=Локальная русская диктовка
-Exec=/opt/e-voice/EVoice
-Icon=e-voice
-Terminal=false
-Categories=AudioVideo;Audio;Accessibility;

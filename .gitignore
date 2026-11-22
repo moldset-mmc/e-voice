@@ -1,8 +1,0 @@
-.venv/
-__pycache__/
-*.pyc
-/build/
-/dist/
-/data/
-/models/gigaam-v3/*.onnx
-*.log

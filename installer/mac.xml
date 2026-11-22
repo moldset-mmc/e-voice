@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<installer-gui-script minSpecVersion="2">
-  <title>E Voice</title>
-  <options customize="never"/>
-  <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
-  <choices-outline><line choice="app"/></choices-outline>
-  <choice id="app" visible="false"><pkg-ref id="io.github.moldset-mmc.evoice"/></choice>
-  <pkg-ref id="io.github.moldset-mmc.evoice">EVoice-component.pkg</pkg-ref>
-</installer-gui-script>

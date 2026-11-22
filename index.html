@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="E Voice — русская диктовка без интернета. Скачайте установщик v1.1.4 для Windows, macOS или Linux.">
+<meta name="theme-color" content="#101524">
+<title>E Voice — русская диктовка без интернета</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #101524;
+    --card: #191f30;
+    --ink: #f5f6fc;
+    --muted: #bdc6d9;
+    --line: #363f58;
+    --lime: #d4fd82;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--page);
+    font: 400 1rem/1.56 system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-wrap: break-word;
+  }
+  a { color: inherit; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--lime);
+    outline-offset: 4px;
+  }
+  .wrap { width: min(68rem, calc(100% - 3rem)); margin-inline: auto; }
+  .mast {
+    min-height: 4.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: inline-flex; align-items: center; gap: .65rem; font-size: 1.2rem; font-weight: 760; letter-spacing: -.04em; }
+  .brand-mark, .sample-mark { display: inline-flex; align-items: center; justify-content: center; gap: 3px; flex: none; color: #18251c; background: var(--lime); }
+  .brand-mark { width: 2rem; height: 2rem; border-radius: .6rem; }
+  .brand-mark i, .sample-mark i { width: 3px; height: 30%; border-radius: 1rem; background: currentColor; }
+  .brand-mark i:nth-child(2), .sample-mark i:nth-child(2) { height: 55%; }
+  .version { color: var(--muted); font-size: .94rem; }
+  .hero {
+    display: grid;
+    grid-template-columns: 1.28fr 1fr;
+    align-items: center;
+    gap: clamp(1.75rem, 5vw, 4.5rem);
+    padding-block: clamp(2.5rem, 7vw, 5rem) clamp(3rem, 7vw, 5rem);
+  }
+  h1, h2, h3, p { margin: 0; }
+  h1 { max-width: 12ch; font-size: clamp(3rem, 7vw, 5.45rem); font-weight: 780; line-height: .98; letter-spacing: -.065em; }
+  h1 em { color: var(--lime); font-style: normal; }
+  .lead { max-width: 31rem; margin-top: 1.35rem; color: var(--muted); font-size: clamp(1rem, 2vw, 1.16rem); }
+  .button {
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 2.85rem;
+    padding: .55rem .8rem;
+    border: 1px solid var(--line);
+    border-radius: .55rem;
+    font-size: .94rem;
+    font-weight: 690;
+    text-decoration: none;
+  }
+  .button:hover { background: #303a53; border-color: #8794b1; }
+  .primary { padding-inline: 1rem; background: var(--lime); color: #162110; border-color: transparent; }
+  .primary:hover { background: #e6ffb5; border-color: transparent; }
+  .hero .button { margin-top: 1.55rem; }
+  .sample {
+    min-width: 0;
+    display: grid;
+    gap: 1.15rem;
+    padding: clamp(1rem, 3vw, 1.7rem);
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: radial-gradient(ellipse at 100% 0%, #323c55 0%, #191f30 70%);
+  }
+  .sample-top { display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: .9rem; }
+  .sample-mark { width: 1.7rem; height: 1.7rem; border-radius: 50%; }
+  .wave { display: flex; align-items: center; justify-content: center; gap: clamp(3px, .56vw, 8px); height: 3.4rem; padding-inline: .25rem; }
+  .wave i { display: block; width: 4px; height: var(--h); background: var(--lime); border-radius: .5rem; opacity: .8; }
+  .transcript { padding: .85rem 1rem; background: #101624; border: 1px solid var(--line); border-radius: .5rem; font-size: clamp(1.02rem, 2.2vw, 1.3rem); letter-spacing: -.025em; }
+  h2 { font-size: clamp(1.85rem, 4.4vw, 3rem); letter-spacing: -.045em; line-height: 1.13; }
+  .section-lead { margin-top: .55rem; color: var(--muted); }
+  .platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 1rem; margin-top: 1.25rem; }
+  .platform {
+    min-width: 0;
+    padding: 1.1rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: .85rem;
+  }
+  h3 { font-size: 1.3rem; font-weight: 740; letter-spacing: -.025em; }
+  .packages { display: grid; gap: .9rem; margin-top: .9rem; }
+  .package { display: grid; gap: .45rem; }
+  .package + .package { border-top: 1px solid var(--line); padding-top: .9rem; }
+  .package strong { font-weight: 660; }
+  .package-note { font-size: .9rem; color: var(--muted); }
+  .package-links { display: flex; flex-wrap: wrap; gap: .45rem; }
+  .help { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 2rem; padding-block: 1.55rem; border-top: 1px solid var(--line); }
+  .help h2 { font-size: 1.2rem; letter-spacing: -.02em; }
+  .help p { margin-top: .45rem; color: var(--muted); }
+  .text-link { text-underline-offset: .2em; }
+  .text-link:hover { color: var(--lime); }
+  footer { display: flex; flex-wrap: wrap; gap: .5rem 1.3rem; color: var(--muted); border-top: 1px solid var(--line); padding-block: 1.2rem 1.65rem; font-size: .91rem; }
+  @media (max-width: 55rem) {
+    .platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .platform:last-child { grid-column: 1 / -1; }
+    .platform:last-child .packages { grid-template-columns: 1fr 1fr; }
+    .platform:last-child .package + .package { border-top: 0; padding-top: 0; }
+  }
+  @media (max-width: 40rem) {
+    .wrap { width: calc(100% - 2rem); }
+    .mast { min-height: 3.7rem; }
+    .hero { grid-template-columns: 1fr; gap: 1.6rem; padding-block: 2.3rem 2.55rem; }
+    .sample { gap: .65rem; }
+    .wave { height: 2.05rem; }
+    .platforms, .help, .platform:last-child .packages { grid-template-columns: 1fr; }
+    .platform:last-child .package + .package { border-top: 1px solid var(--line); padding-top: .9rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+<header class="mast wrap">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>E Voice</div>
+  <a class="version text-link" href="https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.4">Версия 1.1.4</a>
+</header>
+<main class="wrap">
+  <section class="hero" aria-labelledby="title">
+    <div>
+      <h1 id="title">Русская диктовка <em>без интернета</em></h1>
+      <p class="lead">Говорите, а E Voice превращает речь в текст прямо на компьютере. Русская модель уже в установщике. Аккаунт и подписка не нужны.</p>
+      <a class="button primary" href="#download">Выбрать установщик</a>
+    </div>
+    <div class="sample">
+      <div class="sample-top"><span class="sample-mark" aria-hidden="true"><i></i><i></i><i></i></span>Пример диктовки</div>
+      <div class="wave" aria-hidden="true">
+        <i style="--h:12%"></i><i style="--h:21%"></i><i style="--h:16%"></i><i style="--h:36%"></i><i style="--h:56%"></i><i style="--h:36%"></i><i style="--h:28%"></i><i style="--h:66%"></i><i style="--h:84%"></i><i style="--h:51%"></i><i style="--h:75%"></i><i style="--h:34%"></i><i style="--h:48%"></i><i style="--h:86%"></i><i style="--h:100%"></i><i style="--h:65%"></i><i style="--h:39%"></i><i style="--h:55%"></i><i style="--h:25%"></i><i style="--h:41%"></i><i style="--h:20%"></i><i style="--h:12%"></i>
+      </div>
+      <p class="transcript">Напомни мне отправить отчёт к вечеру.</p>
+    </div>
+  </section>
+
+  <section id="download" aria-labelledby="download-title">
+    <h2 id="download-title">Скачать E Voice</h2>
+    <p class="section-lead">Выберите систему компьютера, на который будете устанавливать программу.</p>
+
+    <div class="platforms">
+      <section class="platform" aria-labelledby="windows">
+        <h3 id="windows">Windows</h3>
+        <div class="packages">
+          <div class="package">
+            <strong>Windows 10 и 11 · x64</strong>
+            <p class="package-note">На Windows 11 ARM запускается через эмуляцию x64.</p>
+            <div class="package-links">
+              <a class="button" aria-label="Скачать EXE для Windows x64" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Setup-x64.exe">Скачать EXE · 182 МБ</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="platform" aria-labelledby="mac">
+        <h3 id="mac">macOS</h3>
+        <div class="packages">
+          <div class="package">
+            <strong>Apple Silicon · M1 и новее</strong>
+            <div class="package-links">
+              <a class="button" aria-label="Скачать PKG для Mac с Apple Silicon" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-macOS-arm64.pkg">Скачать PKG · 198 МБ</a>
+            </div>
+          </div>
+          <div class="package">
+            <strong>Mac с Intel</strong>
+            <div class="package-links">
+              <a class="button" aria-label="Скачать PKG для Mac с Intel" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-macOS-x86_64.pkg">Скачать PKG · 200 МБ</a>
+            </div>
+          </div>
+          <p class="package-note">Проверьте чип в меню Apple → «Об этом Mac».</p>
+        </div>
+      </section>
+
+      <section class="platform" aria-labelledby="linux">
+        <h3 id="linux">Linux</h3>
+        <div class="packages">
+          <div class="package">
+            <strong>x64 · Intel / AMD</strong>
+            <div class="package-links">
+              <a class="button" aria-label="Скачать DEB для Linux x64" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-amd64.deb">DEB · 203 МБ</a>
+              <a class="button" aria-label="Скачать архив для Linux x64" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-amd64.tar.gz">Архив · 222 МБ</a>
+            </div>
+          </div>
+          <div class="package">
+            <strong>ARM64</strong>
+            <div class="package-links">
+              <a class="button" aria-label="Скачать DEB для Linux ARM64" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-arm64.deb">DEB · 201 МБ</a>
+              <a class="button" aria-label="Скачать архив для Linux ARM64" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-arm64.tar.gz">Архив · 222 МБ</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <div class="help">
+    <section aria-labelledby="verified">
+      <h2 id="verified">Проверено в выпуске 1.1.4</h2>
+      <p>Автоматические тесты проверили распознавание без интернета на Windows, Mac и Linux. При сбое передачи аудио можно начать следующую диктовку из того же приложения. <a class="text-link" href="https://github.com/moldset-mmc/e-voice/actions/runs/44641559648">Результаты тестов</a></p>
+    </section>
+    <section aria-labelledby="setup">
+      <h2 id="setup">Первый запуск</h2>
+      <p>Разрешите доступ к микрофону. Откройте пустой текстовый файл, продиктуйте короткую фразу и проверьте вставку. <a class="text-link" href="https://github.com/moldset-mmc/e-voice/blob/v1.1.4/README.md#первый-запуск-на-новом-компьютере">Инструкция по установке</a></p>
+    </section>
+  </div>
+</main>
+<footer class="wrap">
+  <a class="text-link" href="https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.4">Релиз на GitHub</a>
+  <a class="text-link" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/SHA256SUMS.txt">Контрольные суммы</a>
+  <a class="text-link" href="https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-1.1.4-Licenses-and-Sources.zip">Лицензии и исходники</a>
+</footer>
+</html>

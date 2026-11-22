@@ -1,8 +1,0 @@
-Package: e-voice
-Version: @VERSION@
-Architecture: @ARCH@
-Maintainer: E Voice contributors <281352120+moldset-mmc@users.noreply.github.com>
-Section: sound
-Priority: optional
-Depends: libc6 (>= 2.35), libasound2 | libasound2t64, libx11-6
-Description: Offline Russian desktop dictation with the bundled GigaAM model

@@ -1,0 +1,54 @@
+name: Publish the verified E Voice 1.1.5 packages
+on:
+  push:
+    branches: [ops/publish-verified-1.1.5]
+    paths: [.github/workflows/publish-verified-115.yml]
+permissions:
+  actions: read
+  contents: write
+concurrency: publish-verified-1.1.5
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_REPO: moldset-mmc/e-voice
+      GH_TOKEN: ${{ github.token }}
+      TEST_RUN: '46010963119'
+      TESTED_COMMIT: 203fac4a66fb248f127ced3752e6bb241b170998
+      RELEASE_COMMIT: cd446ec3e93c8b26b97491c0f22be352021ac5e4
+      TAG: v1.1.5
+    steps:
+      - name: Read the release notes from the target commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: cd446ec3e93c8b26b97491c0f22be352021ac5e4
+          persist-credentials: false
+      - name: Verify the successful build and retrieve its exact artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat VERSION)" = "1.1.5"
+          gh api "repos/$GH_REPO/actions/runs/$TEST_RUN" | jq -e --arg sha "$TESTED_COMMIT" '.conclusion=="success" and .head_sha==$sha and .head_branch=="release/1.1.5"'
+          gh api "repos/$GH_REPO/compare/$TESTED_COMMIT...$RELEASE_COMMIT" | jq -e '([.files[].filename] | sort) == ["README.md","release-notes.md"]'
+          gh run download "$TEST_RUN" --pattern 'packages-*' --pattern 'release-metadata' --dir incoming
+          mkdir bundle
+          cp incoming/packages-*/* incoming/release-metadata/* bundle/
+          cd bundle
+          echo '9b1ce7b1ff20bc01c42c44785377b70bd64836ace72e8a98c9a84f4b3c559b75  SHA256SUMS.txt' | sha256sum --strict -c -
+          sha256sum --strict -c SHA256SUMS.txt
+          for arch in x64 arm64; do
+            jq -e --arg digest "$(sha256sum E-Voice-Setup-x64.exe | cut -d' ' -f1)" '.sha256==$digest and .passed and .automatic_tray_launch and .shortcut_opens_settings and .cold_launch_opens_settings' "qa-Windows-$arch-windows-wizard.json"
+          done
+      - name: Upload the verified files and publish the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" --draft --target "$RELEASE_COMMIT" --title "E Voice 1.1.5" --notes-file release-notes.md bundle/*
+          release_id=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[] | select(.tag_name=="v1.1.5" and .draft==true) | .id')
+          test -n "$release_id"
+          gh api --paginate "repos/$GH_REPO/releases/$release_id/assets?per_page=100" --jq '.[] | [.digest,.name] | @tsv' | sed -E 's/^sha256:([0-9a-f]{64})\t/\1  /' | LC_ALL=C sort > remote.sums
+          (cd bundle && sha256sum *) | LC_ALL=C sort > local.sums
+          diff -u local.sums remote.sums
+          gh release edit "$TAG" --draft=false --latest
+          gh release view "$TAG" --json isDraft,isPrerelease,url

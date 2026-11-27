@@ -1,0 +1,53 @@
+#!/bin/sh
+# This distribution installs only in the current user's home.
+set -eu
+uid=$(/usr/bin/id -u)
+if [ "$uid" = 0 ]; then
+    # A package service can run scripts as root even for a per-user install.
+    # Prefer the home identified by the installer over the foreground session.
+    dest=${2%/}
+    volume=${3%/}
+    if [ "${dest%/Applications}" != "$dest" ] && [ -n "${dest%/Applications}" ]; then
+        uid=$(/usr/bin/stat -f %u "${dest%/Applications}")
+    elif [ -n "$volume" ] && [ -d "$volume/Applications/E Voice.app" ]; then
+        uid=$(/usr/bin/stat -f %u "$volume")
+    else
+        uid=$(/usr/bin/stat -f %u /dev/console)
+    fi
+    [ "$uid" -ne 0 ] || { echo 'No user identified for E Voice setup.' >&2; exit 1; }
+    # Feed the script on stdin because the package service's staging directory
+    # may be private. All Desktop and Launch Services operations run as the user.
+    if /bin/launchctl print "gui/$uid" >/dev/null 2>&1; then
+        exec /bin/launchctl asuser "$uid" /usr/bin/sudo -H -u "#$uid" -- /bin/sh -s < "$0"
+    fi
+    exec /usr/bin/sudo -H -u "#$uid" -- /bin/sh -s < "$0"
+fi
+
+home=$(/usr/bin/dscacheutil -q user -a uid "$uid" | /usr/bin/sed -n 's/^dir: //p')
+[ -n "$home" ] || { echo 'Could not locate the user home.' >&2; exit 1; }
+app="$home/Applications/E Voice.app"
+[ -x "$app/Contents/MacOS/EVoice" ] || { echo 'Installed E Voice application missing.' >&2; exit 1; }
+
+# Keep an existing user file (including a broken link) and reuse our own link.
+/bin/mkdir -p "$home/Desktop"
+make_shortcut() {
+    for existing in "$home/Desktop/E Voice.app" "$home/Desktop/E Voice "[0-9]*.app; do
+        if [ -L "$existing" ] && [ "$(/usr/bin/readlink "$existing")" = "$app" ]; then return 0; fi
+    done
+    link="$home/Desktop/E Voice.app"
+    index=1
+    while :; do
+        if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+            /bin/ln -sh "$app" "$link" && return 0
+            [ -e "$link" ] || [ -L "$link" ] || return 1
+        fi
+        if [ -L "$link" ] && [ "$(/usr/bin/readlink "$link")" = "$app" ]; then return 0; fi
+        index=$((index + 1))
+        link="$home/Desktop/E Voice $index.app"
+    done
+}
+make_shortcut
+
+if /bin/launchctl print "gui/$uid" >/dev/null 2>&1; then
+    /usr/bin/open "$app"
+fi

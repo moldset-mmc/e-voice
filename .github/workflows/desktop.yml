@@ -84,6 +84,7 @@ jobs:
       - if: runner.os == 'macOS'
         shell: bash
         run: |
+          python tools/check_mac_install.py
           sh installer/install.sh --from dist
           sandbox-exec -p '(version 1)(allow default)(deny network*)' "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice" --transcribe tests/fixtures/russian-example.wav --output build/qa-offline.json
           python tools/check_distribution.py

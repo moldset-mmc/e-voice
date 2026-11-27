@@ -46,7 +46,7 @@ fi
 [ "$actual" = "$expected" ] || { echo 'Incorrect checksum.' >&2; exit 1; }
 if [ "$system" = Darwin ]; then
   /usr/sbin/installer -pkg "$tmp/$name" -target CurrentUserHomeDirectory
-  echo 'Open E Voice from ~/Applications.'
+  echo 'E Voice is installed in ~/Applications. Its shortcut is on your Desktop.'
   exit 0
 fi
 base="$HOME/.local/opt/e-voice"

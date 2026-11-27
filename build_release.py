@@ -79,7 +79,8 @@ def build_unix(version):
         package = build / 'EVoice-component.pkg'
         with tempfile.TemporaryDirectory(dir=build, prefix='pkg-') as payload:
             subprocess.run(['ditto', str(DIST / 'E Voice.app'), str(Path(payload) / 'E Voice.app')], check=True)
-            subprocess.run(['pkgbuild', '--root', payload, '--component-plist',
+            subprocess.run(['pkgbuild', '--root', payload, '--scripts', str(ROOT / 'installer/mac-scripts'),
+                            '--component-plist',
                             str(ROOT / 'installer/mac-components.plist'), '--install-location',
                             '/Applications', '--identifier', 'io.github.moldset-mmc.evoice',
                             '--version', version, str(package)], check=True)
@@ -177,11 +178,14 @@ def collect_release_artifacts(source, destination, version, tag):
             required.add('qa-licenses.json')
         if asset == 'Windows-x64':
             required.add('qa-windows-lifecycle.json')
+        if asset.startswith('macOS-'):
+            required.add('qa-mac-install.json')
         if not required.issubset(reports):
             raise ValueError(f'{asset}: missing QA reports {sorted(required - reports.keys())}')
         for name, path in reports.items():
             data = json.loads(path.read_text(encoding='utf-8'))
-            if name in ('qa-interaction.json', 'qa-windows-lifecycle.json', 'qa-arm64.json', 'qa-licenses.json'):
+            if name in ('qa-interaction.json', 'qa-windows-lifecycle.json', 'qa-arm64.json', 'qa-licenses.json',
+                        'qa-mac-install.json'):
                 if data.get('passed') is not True:
                     raise ValueError(f'{asset}: failed QA report {name}')
             elif name in ('qa-offline.json', 'qa-speech.json', 'qa-speech-48k.json'):

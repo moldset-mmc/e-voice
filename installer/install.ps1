@@ -31,7 +31,7 @@ try {
     $result = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
     $result.WaitForExit()
     if ($result.ExitCode -ne 0) { throw "Setup exited with code $($result.ExitCode). Close E Voice before updating." }
-    Write-Output 'E Voice is installed. Open it from the Start menu.'
+    Write-Output 'E Voice is installed. Open it from the desktop shortcut or Start menu.'
 } finally {
     if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
     [IO.Directory]::Delete($directory)

@@ -93,6 +93,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          python installer/check_windows_wizard.py dist/E-Voice-Setup-x64.exe x64
+          if ($LASTEXITCODE) { throw 'Interactive Windows x64 setup check failed' }
           .\installer\install.ps1 -FromDirectory dist -AcceptRuntimeTerms -LogPath "$PWD\build\windows-qa\setup.log"
           python tools/check_distribution.py
       - name: Check installed Windows offline and shutdown lifecycle
@@ -208,6 +210,15 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: {name: packages-Windows-x64, path: package}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with: {python-version: '3.14.10', architecture: x64}
+      - name: Check the interactive installer and Desktop shortcut on Windows ARM
+        shell: pwsh
+        run: |
+          $pywin32 = ((Select-String -Path requirements.lock.txt -Pattern '^pywin32==').Line -split ';')[0]
+          python -m pip install $pywin32
+          if ($LASTEXITCODE) { throw 'Could not install the Windows QA dependency' }
+          python installer/check_windows_wizard.py package/E-Voice-Setup-x64.exe arm64
       - name: Check x64 package under Windows ARM emulation
         shell: pwsh
         run: |

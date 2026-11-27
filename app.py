@@ -231,6 +231,10 @@ class Application:
                                      style='Switch.Glass.TCheckbutton')
             switch.pack(fill='x')
             self.settings_motion.glass.switches[switch.winfo_id()] = switch
+            if variable is self.summon_enabled:
+                ttk.Label(frame, text='Чтобы вызвать микрофон к курсору, быстро щёлкните три раза '
+                          'левой кнопкой в одном месте вне E Voice.', style='Hint.Glass.TLabel',
+                          wraplength=p(380)).pack(anchor='w', padx=(p(8), 0))
 
         result = ttk.Frame(frame, style='Glass.TFrame')
         result.pack(fill='x', pady=(p(10), p(5)))

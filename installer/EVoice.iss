@@ -1,4 +1,4 @@
-#ifndef AppVersion
+﻿#ifndef AppVersion
   #error Supply AppVersion from the VERSION file
 #endif
 [Setup]
@@ -16,7 +16,7 @@ DisableProgramGroupPage=yes
 DisableDirPage=yes
 DisableReadyPage=yes
 DisableWelcomePage=yes
-DisableFinishedPage=yes
+DisableFinishedPage=no
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -37,6 +37,10 @@ RestartApplications=no
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Messages]
+russian.FinishedLabel=E Voice запущен. Дважды щёлкните по ярлыку на рабочем столе, чтобы открыть настройки.%n%nВключите «Вызывать тройным щелчком». Затем трижды быстро щёлкните левой кнопкой мыши в одном месте вне E Voice. Плавающий микрофон появится рядом с курсором.
+english.FinishedLabel=E Voice is running. Double-click the desktop shortcut to open settings.%n%nTurn on “Вызывать тройным щелчком” (triple-click). Then quickly left-click three times in one spot outside E Voice. The floating microphone will appear beside the pointer.
+
 [Files]
 Source: "windows-runtime-terms.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\EVoice\EVoice.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -48,6 +52,7 @@ Source: "..\dist\EVoice\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\E Voice"; Filename: "{app}\EVoice.exe"
+Name: "{userdesktop}\E Voice"; Filename: "{app}\EVoice.exe"
 
 [Run]
 Filename: "{app}\EVoice.exe"; Flags: nowait skipifsilent

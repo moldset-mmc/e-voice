@@ -178,6 +178,8 @@ def collect_release_artifacts(source, destination, version, tag):
             required.add('qa-licenses.json')
         if asset == 'Windows-x64':
             required.add('qa-windows-lifecycle.json')
+        if asset.startswith('Windows-'):
+            required.add('qa-windows-wizard.json')
         if asset.startswith('macOS-'):
             required.add('qa-mac-install.json')
         if not required.issubset(reports):
@@ -185,7 +187,7 @@ def collect_release_artifacts(source, destination, version, tag):
         for name, path in reports.items():
             data = json.loads(path.read_text(encoding='utf-8'))
             if name in ('qa-interaction.json', 'qa-windows-lifecycle.json', 'qa-arm64.json', 'qa-licenses.json',
-                        'qa-mac-install.json'):
+                        'qa-mac-install.json', 'qa-windows-wizard.json'):
                 if data.get('passed') is not True:
                     raise ValueError(f'{asset}: failed QA report {name}')
             elif name in ('qa-offline.json', 'qa-speech.json', 'qa-speech-48k.json'):

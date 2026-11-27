@@ -32,6 +32,8 @@ class ReleaseAssemblyTests(unittest.TestCase):
                 self.report(asset, 'qa-mac-install.json', {'passed': True})
         self.report('Windows-x64', 'qa-windows-lifecycle.json', {'passed': True})
         self.report('Windows-arm64', 'qa-arm64.json', {'passed': True})
+        for asset in ('Windows-x64', 'Windows-arm64'):
+            self.report(asset, 'qa-windows-wizard.json', {'passed': True})
 
     def report(self, asset, name, data):
         folder = self.source / f'qa-{asset}'

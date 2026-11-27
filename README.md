@@ -6,43 +6,43 @@
 
 ## Скачать
 
-**E Voice 1.1.4** исправляет зависание при передаче записи распознавателю и сохраняет новую копию пользователя после автовставки на macOS и X11. [Установщики и контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.4) · [Изменения относительно 1.1.3](https://github.com/moldset-mmc/e-voice/compare/v1.1.3...v1.1.4)
+**E Voice 1.1.5** исправляет завершение установки из PowerShell и сохраняет исходники точных версий пакетов Ubuntu во время их сборки. [Установщики и контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.5) · [Изменения относительно 1.1.4](https://github.com/moldset-mmc/e-voice/compare/v1.1.4...v1.1.5)
 
-Выберите пакет **E Voice 1.1.4** для своего компьютера. Его можно скачать без входа в GitHub и перенести на флешке. Для установки выбирайте EXE, PKG, DEB или Linux-архив из таблицы. Стандартная загрузка GitHub «Source code» содержит исходники проекта, а файлы весов входят в пакеты ниже.
+Выберите пакет **E Voice 1.1.5** для своего компьютера. Его можно скачать без входа в GitHub и перенести на флешке. Для установки выбирайте EXE, PKG, DEB или Linux-архив из таблицы. Стандартная загрузка GitHub «Source code» содержит исходники проекта, а файлы весов входят в пакеты ниже.
 
 | Система | Скачать с моделью |
 | --- | --- |
-| Windows 10/11 x64, Windows 11 ARM с эмуляцией x64 | [Установщик EXE](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Setup-x64.exe) |
-| Mac с Apple Silicon (M1 и новее) | [Установщик PKG](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-macOS-arm64.pkg) |
-| Mac с Intel | [Установщик PKG](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-macOS-x86_64.pkg) |
-| Linux x86-64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-amd64.deb) · [Архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-amd64.tar.gz) |
-| Linux ARM64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-arm64.deb) · [Архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Linux-arm64.tar.gz) |
+| Windows 10/11 x64, Windows 11 ARM с эмуляцией x64 | [Установщик EXE](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-Setup-x64.exe) |
+| Mac с Apple Silicon (M1 и новее) | [Установщик PKG](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-macOS-arm64.pkg) |
+| Mac с Intel | [Установщик PKG](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-macOS-x86_64.pkg) |
+| Linux x86-64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-Linux-amd64.deb) · [Архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-Linux-amd64.tar.gz) |
+| Linux ARM64 | [Пакет DEB](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-Linux-arm64.deb) · [Архив](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-Linux-arm64.tar.gz) |
 
 После установки на новый компьютер пройдите короткую проверку микрофона и вставки. Для передачи копий другим людям и продажи предусмотрен отдельный раздел с условиями и историческим лицензионным аудитом 1.1.1; он не заменяет аудит новых пакетов. [Первый запуск](#первый-запуск-на-новом-компьютере) · [Что входит в комплект](#комплектация-выпуска) · [Права на распространение](#бесплатное-и-платное-распространение)
 
-Пакеты выпуска распространяются без коммерческой подписи. На Mac для открытия PKG может потребоваться подтверждение в **Системные настройки → Конфиденциальность и безопасность**. [Инструкция Apple](https://support.apple.com/102445) · [Все файлы выпуска и контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.4)
+Пакеты выпуска распространяются без коммерческой подписи. На Mac для открытия PKG может потребоваться подтверждение в **Системные настройки → Конфиденциальность и безопасность**. [Инструкция Apple](https://support.apple.com/102445) · [Все файлы выпуска и контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.5)
 
 ### Установка одной командой
 
 **Windows 10/11.** Выполните в командной строке (`cmd.exe`) из папки для загрузки. При обновлении сначала закройте E Voice через его меню в области уведомлений.
 
 ```bat
-curl.exe -fL https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-Setup-x64.exe -o E-Voice-Setup-x64.exe && E-Voice-Setup-x64.exe
+curl.exe -fL https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-Setup-x64.exe -o E-Voice-Setup-x64.exe && E-Voice-Setup-x64.exe
 ```
 
 **macOS и настольный Linux.** Выполните в терминале. Скрипт выберет пакет для вашего процессора, проверит SHA-256 и установит E Voice для текущего пользователя.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installer/install.sh -o install-e-voice.sh && sh install-e-voice.sh
+curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.5/installer/install.sh -o install-e-voice.sh && sh install-e-voice.sh
 ```
 
-Для установки скриптом **без сети** положите пакет и `SHA256SUMS.txt` в одну папку. На Linux скрипту нужен архив `.tar.gz`. Из копии репозитория запустите `./installer/install.ps1 -FromDirectory <папка>` в PowerShell или `sh installer/install.sh --from <папка>` на Mac и Linux. [Скачать SHA256SUMS.txt](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/SHA256SUMS.txt) · [Исходники установщиков](installer)
+Для установки скриптом **без сети** положите пакет и `SHA256SUMS.txt` в одну папку. На Linux скрипту нужен архив `.tar.gz`. Из копии репозитория запустите `./installer/install.ps1 -FromDirectory <папка>` в PowerShell или `sh installer/install.sh --from <папка>` на Mac и Linux. [Скачать SHA256SUMS.txt](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/SHA256SUMS.txt) · [Исходники установщиков](installer)
 
 При обычном запуске EXE показывает условия Microsoft Runtime. Для автоматической установки после их принятия используйте `E-Voice-Setup-x64.exe /VERYSILENT /NORESTART /ACCEPTRUNTIMETERMS=1` или добавьте `-AcceptRuntimeTerms` к `install.ps1`. [Текст условий](installer/windows-runtime-terms.txt)
 
 ## Фоновый режим Windows
 
-Управление из трея появилось в 1.1.3. Выпуск 1.1.4 сохраняет эти настройки. Автоматическая проверка диктовки использует WAV. Проверить собственный микрофон можно первой короткой записью.
+Управление из трея появилось в 1.1.3. Выпуск 1.1.5 сохраняет эти настройки. Автоматическая проверка диктовки использует WAV. Проверить собственный микрофон можно первой короткой записью.
 
 - На чистой установке E Voice запускается с маленьким значком микрофона в трее, без окна настроек, плавающей кнопки и постоянной кнопки на панели задач. Значок может находиться под стрелкой скрытых значков Windows.
 - Левый щелчок по значку открывает настройки; правый — меню записи, показа/скрытия микрофона и выхода. Повторный запуск E Voice открывает настройки уже работающего экземпляра.
@@ -80,7 +80,7 @@ curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installe
 | На микрофон можно нажать, а горячая клавиша не действует | Выберите свободное сочетание. На Mac проверьте разрешения выше. В Wayland начните и завершите запись кнопкой. |
 | Текст есть в настройках, но поле пустое | Скопируйте последний текст и вставьте вручную. Для следующей диктовки оставьте обычное редактируемое поле активным. Защищённое поле или окно с повышенными правами может блокировать системный ввод. |
 | Кнопка скрыта | Повторно запустите E Voice. В Windows нажмите значок в трее (возможно, под стрелкой скрытых значков), а не на панели задач. На поддерживаемых рабочих столах с включённым жестом сделайте три быстрых левых щелчка. |
-| Программа сообщает о повреждении модели | Закройте E Voice, сверьте SHA-256 установщика с выпуском и переустановите полный пакет своей платформы. Все файлы модели восстанавливаются из него. [Контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/SHA256SUMS.txt) |
+| Программа сообщает о повреждении модели | Закройте E Voice, сверьте SHA-256 установщика с выпуском и переустановите полный пакет своей платформы. Все файлы модели восстанавливаются из него. [Контрольные суммы](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/SHA256SUMS.txt) |
 
 </details>
 
@@ -109,11 +109,11 @@ curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installe
 
 ## Совместимость и ресурсы
 
-Для публикации 1.1.4 сборка проверяет установленные пакеты на Windows x64, Windows 11 ARM с эмуляцией x64, macOS 15 на Apple Silicon и Intel и Ubuntu 22.04 на x86-64 и ARM64. Проверки включают офлайн-распознавание, интерфейс и завершение дочерних процессов в Windows. Для Linux нужны графическая сессия, glibc 2.35 или новее и системные библиотеки рабочего стола. [Отчёты по платформам](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.4) · [Конфигурация проверок](.github/workflows/desktop.yml)
+Для публикации 1.1.5 сборка проверяет установленные пакеты на Windows x64, Windows 11 ARM с эмуляцией x64, macOS 15 на Apple Silicon и Intel и Ubuntu 22.04 на x86-64 и ARM64. Проверки включают офлайн-распознавание, интерфейс и завершение дочерних процессов в Windows. Для Linux нужны графическая сессия, glibc 2.35 или новее и системные библиотеки рабочего стола. [Отчёты по платформам](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.5) · [Конфигурация проверок](.github/workflows/desktop.yml)
 
 **Сколько ждать после диктовки?** Запись начинается сразу. E Voice загружает модель с диска параллельно с первой фразой, повторно использует её для следующих и освобождает через 30 секунд простоя. Новое скачивание не требуется.
 
-| Историческое измерение на Windows x64 | E Voice 1.1.1 (не замеры 1.1.4) |
+| Историческое измерение на Windows x64 | E Voice 1.1.1 (не замеры 1.1.5) |
 | --- | --- |
 | Установка из заранее скачанного пакета с проверкой SHA-256 | около 18 с |
 | От остановки до текста, модель уже в памяти | 173 мс |
@@ -126,7 +126,7 @@ curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installe
 
 ## Комплектация выпуска
 
-Сборка 1.1.4 формирует семь пакетов с приложением, средой выполнения, движком, русской моделью и лицензионными уведомлениями. Отдельно устанавливать Python, покупать модель или получать API-ключ не требуется. Пакеты и SHA-256 становятся доступны только после успешной проверки и публикации на [странице выпуска](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.4). [Версии зависимостей и инструментов сборки](requirements.lock.txt)
+Сборка 1.1.5 формирует семь пакетов с приложением, средой выполнения, движком, русской моделью и лицензионными уведомлениями. Отдельно устанавливать Python, покупать модель или получать API-ключ не требуется. Пакеты и SHA-256 становятся доступны только после успешной проверки и публикации на [странице выпуска](https://github.com/moldset-mmc/e-voice/releases/tag/v1.1.5). [Версии зависимостей и инструментов сборки](requirements.lock.txt)
 
 | Часть | Что установится и для чего |
 | --- | --- |
@@ -134,7 +134,7 @@ curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installe
 | Звук и распознавание | PortAudio и python-sounddevice получают звук с выбранного микрофона. sherpa-onnx 2.0.1 и ONNX Runtime 1.28.2 обрабатывают его на процессоре в отдельном процессе. |
 | Русская модель | В папке `models/gigaam-v3` лежат `encoder.int8.onnx`, `decoder.onnx`, `joiner.onnx` и словарь `tokens.txt`. Вместе они занимают 231 897 202 байта. Рядом находятся `manifest.json` с размерами и SHA-256 и отдельный `LICENSE` GigaChat Team. [Манифест](models/gigaam-v3/manifest.json) |
 | Интеграция с рабочим столом | Windows использует Win32, pywin32 и pystray. На Mac работают pynput и PyObjC с системными API Apple. В Linux используются pynput, python-xlib, X11 и звуковые библиотеки. Особенности Wayland описаны выше. |
-| Документы | `LICENSE` содержит условия для авторского кода. `THIRD_PARTY.md` указывает разработчиков компонентов. В `licenses/` лежат тексты лицензий и уведомлений, в том числе для ONNX Runtime. Лицензионный архив ниже содержит поимённые списки файлов исторического выпуска 1.1.1; это не аудит пакетов 1.1.4. |
+| Документы | `LICENSE` содержит условия для авторского кода. `THIRD_PARTY.md` указывает разработчиков компонентов. В `licenses/` лежат тексты лицензий и уведомлений, в том числе для ONNX Runtime. Лицензионный архив ниже содержит поимённые списки файлов исторического выпуска 1.1.1; это не аудит пакетов 1.1.5. |
 
 <details>
 <summary>Где находятся программа, модель и настройки</summary>
@@ -144,7 +144,7 @@ curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installe
 | Windows | `%LOCALAPPDATA%\Programs\E Voice\EVoice.exe`. Модель и `licenses` лежат рядом с EXE, библиотеки — в `_internal`. | `%LOCALAPPDATA%\E Voice\settings.json` |
 | macOS | `~/Applications/E Voice.app`. Модель и лицензии лежат в `Contents/Resources`, исполняемый файл — в `Contents/MacOS`. | `~/Library/Application Support/E Voice/settings.json` |
 | Linux, DEB | `/opt/e-voice/EVoice`, команда `/usr/bin/e-voice`. Модель и лицензии лежат в `/opt/e-voice/_internal`. | `$XDG_CONFIG_HOME/e-voice/settings.json`, по умолчанию `~/.config/e-voice/settings.json` |
-| Linux, установка скриптом | `~/.local/opt/e-voice/1.1.4-<архитектура>/EVoice` и ярлык `~/.local/bin/e-voice`. При ручной распаковке папку выбираете вы. | Тот же каталог настроек Linux. |
+| Linux, установка скриптом | `~/.local/opt/e-voice/1.1.5-<архитектура>/EVoice` и ярлык `~/.local/bin/e-voice`. При ручной распаковке папку выбираете вы. | Тот же каталог настроек Linux. |
 
 В новом профиле E Voice применяет значения по умолчанию. После изменения параметров в `settings.json` сохраняются выбранные микрофон и клавиша, настройки вставки, видимости, жеста и положение кнопки. На другом компьютере проще выбрать микрофон заново, поскольку имена устройств могут отличаться. [Значения по умолчанию в Windows](app.py) · [Значения в macOS и Linux](unix_desktop.py)
 
@@ -160,9 +160,9 @@ curl -fsSL https://raw.githubusercontent.com/moldset-mmc/e-voice/v1.1.4/installe
 
 **MIT разрешает бесплатно распространять и продавать копии авторского кода E Voice и включённой модели GigaAM.** В обоих случаях передавайте получателю текст MIT и соответствующее уведомление об авторстве. Для кода это **E Voice contributors**, для модели — **GigaChat Team**. При продаже у покупателя сохраняются права, данные ему соответствующими лицензиями. [Лицензия кода](LICENSE) · [Лицензия точной версии модели](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/blob/a6039be7cee829a9044a69ac0ebaf1c191217c97/LICENSE)
 
-### Передача готового выпуска 1.1.4
+### Передача готового выпуска 1.1.5
 
-Сохраняйте `LICENSE`, `models/gigaam-v3/LICENSE`, `THIRD_PARTY.md` и папку `licenses`. Размещайте архив **E-Voice-1.1.4-Licenses-and-Sources.zip** рядом с установщиками с доступом без дополнительной платы. При передаче на физическом носителе положите туда и этот архив. Сверьте SHA-256 файла со списком выпуска. [Архив исходников и лицензий](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/E-Voice-1.1.4-Licenses-and-Sources.zip) · [SHA-256](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.4/SHA256SUMS.txt)
+Сохраняйте `LICENSE`, `models/gigaam-v3/LICENSE`, `THIRD_PARTY.md` и папку `licenses`. Размещайте архив **E-Voice-1.1.5-Licenses-and-Sources.zip** рядом с установщиками с доступом без дополнительной платы. При передаче на физическом носителе положите туда и этот архив. Сверьте SHA-256 файла со списком выпуска. [Архив исходников и лицензий](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/E-Voice-1.1.5-Licenses-and-Sources.zip) · [SHA-256](https://github.com/moldset-mmc/e-voice/releases/download/v1.1.5/SHA256SUMS.txt)
 
 - **Windows.** Две неизменённые подписанные библиотеки Visual C++ Runtime x64 взяты из Microsoft Visual Studio 2022 REDIST. Установщик показывает условия для этих компонентов. Они действуют при бесплатной и платной передаче. Сведения о происхождении, подписанте и SHA-256 находятся в `licenses/Microsoft-runtime-files.json`. UCRT предоставляет Windows 10/11. При самостоятельной переупаковке применяются права и обязанности распространителя Microsoft Distributable Code. [Условия в установщике](installer/windows-runtime-terms.txt) · [Перечень REDIST Microsoft](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution) · [Дополнительные условия сборки CPython](https://github.com/python/cpython/blob/v3.14.10/PC/crtlicense.txt)
 - **Звук.** Windows использует обычный PortAudio, macOS — Core Audio через PortAudio. Состав установленных пакетов проверяется на отсутствие DLL с ASIO. Микрофоны с обычным системным входом работают по-прежнему. Для устройства с единственным интерфейсом ASIO потребуется системный драйвер с поддержкой обычного входа. [Проверка дистрибутивов](tools/check_distribution.py)

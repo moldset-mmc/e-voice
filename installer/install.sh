@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install one complete release in the current user account.
 set -eu
-version=1.1.4
+version=1.1.5
 release="https://github.com/moldset-mmc/e-voice/releases/download/v$version"
 system=$(uname -s)
 machine=$(uname -m)

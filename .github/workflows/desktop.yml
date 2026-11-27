@@ -138,7 +138,7 @@ jobs:
             dist/E-Voice-Setup-x64.exe
   release:
     needs: [lint, native, windows-arm-compatibility]
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/heads/release/'))
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/release/'))
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -166,7 +166,25 @@ jobs:
         run: |
           python tools/source_companion.py package release
           python tools/checksums.py release
-      - env:
+      - name: Verify candidate checksums and report package sizes
+        working-directory: release
+        run: |
+          sha256sum --check SHA256SUMS.txt
+          stat --format='%n %s' E-Voice-*
+      - name: Preserve candidate checksums, sources and QA reports
+        if: github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-metadata
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            release/SHA256SUMS.txt
+            release/*-Licenses-and-Sources.zip
+            release/qa-*.json
+      - name: Publish verified release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash

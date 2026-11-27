@@ -13,6 +13,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .stage{display:grid;place-items:center;min-height:100svh;padding:24px 14px;background:radial-gradient(ellipse at 50% 35%,#1a303b 0,#0b161e 48%,#070e14 100%)}
 .card{position:relative;width:min(100%,440px);border-radius:20px;overflow:hidden;background:var(--paper);box-shadow:0 18px 54px -25px #000b}
 .faces{position:relative;perspective:1400px}
+.enhanced .stage{cursor:pointer}
 .face{position:relative;min-width:0}
 .enhanced .face{grid-area:1/1;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .enhanced .faces{display:grid}

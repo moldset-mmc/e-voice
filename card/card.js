@@ -32,6 +32,11 @@ document.documentElement.classList.add("enhanced");
 displayFace(false);
 window.addEventListener("hashchange", () => displayFace(true));
 
+document.querySelector(".stage").addEventListener("click", (event) => {
+  if (event.defaultPrevented || event.target.closest("a, button, summary") || window.getSelection()?.type === "Range") return;
+  location.hash = front.hidden ? "#front" : "#about";
+});
+
 function openShareDialog() {
   statusLine.textContent = "";
   dialog.showModal();

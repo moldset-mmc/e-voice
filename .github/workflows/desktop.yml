@@ -41,6 +41,9 @@ jobs:
         with: {python-version: '3.14.10'}
       - if: runner.os == 'Linux'
         run: |
+          for suite in jammy jammy-updates jammy-security jammy-backports; do
+            printf 'deb-src [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu %s main restricted universe multiverse\n' "$suite"
+          done | sudo tee /etc/apt/sources.list.d/evoice-sources.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y libportaudio2 libasound2-dev python3-tk xvfb xauth openbox
       - run: python -m pip install -r requirements.lock.txt
@@ -53,6 +56,17 @@ jobs:
           python build_release.py --iscc $compiler.FullName
       - if: runner.os != 'Windows'
         run: python build_release.py
+      - name: Preserve corresponding Ubuntu sources for the packages just built
+        if: runner.os == 'Linux'
+        run: python tools/source_companion.py --ubuntu-inventory dist/EVoice/_internal/licenses/system/packages.tsv build/ubuntu-sources
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ubuntu-sources-${{ matrix.asset }}
+          path: build/ubuntu-sources/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
       - shell: bash
         run: python tools/checksums.py dist
       - if: runner.os == 'Linux'
@@ -148,10 +162,8 @@ jobs:
             RELEASE_TAG="v$version"
           fi
           python build_release.py --collect-artifacts package --release-directory release --release-tag "$RELEASE_TAG"
-      - name: Collect exact corresponding sources from Ubuntu signed source indices
+      - name: Assemble matching sources and notices from the build artifacts
         run: |
-          printf '%s\n' 'deb-src https://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse' 'deb-src https://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse' 'deb-src https://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse' | sudo tee /etc/apt/sources.list.d/evoice-sources.list
-          sudo apt-get -o Acquire::Retries=3 update -qq
           python tools/source_companion.py package release
           python tools/checksums.py release
       - env:

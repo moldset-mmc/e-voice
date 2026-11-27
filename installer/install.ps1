@@ -27,7 +27,9 @@ try {
         $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath)
         $arguments += ' /LOG="' + $LogPath + '"'
     }
-    $result = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru
+    # Setup can launch E Voice, which keeps running in the notification area.
+    $result = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
+    $result.WaitForExit()
     if ($result.ExitCode -ne 0) { throw "Setup exited with code $($result.ExitCode). Close E Voice before updating." }
     Write-Output 'E Voice is installed. Open it from the Start menu.'
 } finally {

@@ -46,7 +46,29 @@ def caption(hwnd):
     buf = ctypes.create_unicode_buffer(1024)
     win32gui.SendMessageTimeout(hwnd, win32con.WM_GETTEXT, len(buf),
                                 ctypes.addressof(buf), win32con.SMTO_ABORTIFHUNG, 1000)
-    return buf.value.replace('&', '')
+    return buf.value.replace('&', '').strip().rstrip('>›» ').strip()
+
+
+def click_control(hwnd):
+    # Use a real mouse click if this hosted session exposes the input desktop.
+    # Send input only when the requested control is actually under the pointer.
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    point = ((left + right) // 2, (top + bottom) // 2)
+    try:
+        win32api.SetCursorPos(point)
+        if win32gui.WindowFromPoint(point) == hwnd:
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+            return
+    except win32api.error as error:
+        if error.winerror != 5:
+            raise
+    # Non-interactive desktop sessions still dispatch ordinary click messages
+    # to the visible wizard. Native Delphi radio buttons need down and up.
+    x, y = win32gui.ScreenToClient(hwnd, point)
+    xy = win32api.MAKELONG(x, y)
+    win32gui.SendMessageTimeout(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, xy, 2, 2000)
+    win32gui.SendMessageTimeout(hwnd, win32con.WM_LBUTTONUP, 0, xy, 2, 2000)
 
 
 def drive_wizard(setup, log, report):
@@ -56,20 +78,28 @@ def drive_wizard(setup, log, report):
                               win32gui.GetClassName(h) == 'TWizardForm' and
                               'E Voice' in win32gui.GetWindowText(h) and win32gui.IsWindowVisible(h)), None),
                               'The normal E Voice setup wizard did not appear')
-            def controls():
+            def controls(enabled=True):
                 if process.poll() is not None:
                     raise RuntimeError(f'Setup exited early with code {process.returncode}')
                 return {caption(h): h for h in windows(wizard)
-                        if win32gui.IsWindowVisible(h) and win32gui.IsWindowEnabled(h)}
+                        if win32gui.IsWindowVisible(h) and (not enabled or win32gui.IsWindowEnabled(h))}
             def click(labels):
                 def find_button():
                     page = controls()
                     return next((page[label] for label in labels if label in page), None)
                 button = wait_for(find_button, f'Missing wizard control: {labels}', 180)
-                win32gui.PostMessage(button, win32con.BM_CLICK, 0, 0)
+                click_control(button)
 
-            click(['Я принимаю условия соглашения'])
-            click(['Далее >', 'Установить'])
+            accept = 'Я принимаю условия соглашения'
+            radio = wait_for(lambda: controls().get(accept), 'License acceptance control')
+            click_control(radio)
+            time.sleep(.3)
+            if not win32gui.SendMessage(radio, win32con.BM_GETCHECK, 0, 0):
+                # Delphi reflects BN_CLICKED to its radio button to update both
+                # the checked value and the enablement of the real Next button.
+                command = win32api.MAKELONG(win32gui.GetDlgCtrlID(radio), win32con.BN_CLICKED)
+                win32gui.SendMessageTimeout(win32gui.GetParent(radio), win32con.WM_COMMAND, command, radio, 2, 2000)
+            click(['Далее', 'Установить'])
             def finished():
                 page = controls()
                 if 'Завершить' in page:
@@ -77,13 +107,19 @@ def drive_wizard(setup, log, report):
                         raise RuntimeError('The finish page is missing the triple-click hint')
                     return True
                 if 'Установить' in page:
-                    win32gui.PostMessage(page['Установить'], win32con.BM_CLICK, 0, 0)
+                    click_control(page['Установить'])
                 return False
             wait_for(finished, 'Setup did not reach the finish page', 180)
             report['visible_finish_hint'] = True
             click(['Завершить'])
             if process.wait(timeout=60):
                 raise RuntimeError(f'Setup failed with code {process.returncode}')
+        except Exception:
+            if 'wizard' in locals() and win32gui.IsWindow(wizard):
+                for label, hwnd in controls(enabled=False).items():
+                    print('Wizard control:', win32gui.GetClassName(hwnd), bool(win32gui.IsWindowEnabled(hwnd)),
+                          ascii(label[:120]), flush=True)
+            raise
         finally:
             if process.poll() is None:
                 process.kill()

@@ -4,25 +4,31 @@ import ctypes
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import time
+from pathlib import Path
 
 import win32api
 import win32con
 import win32event
 import win32gui
 import win32process
+from check_windows import require_hosted_windows
 from win32com.client import Dispatch
 from win32com.shell import shell, shellcon
-
-from check_windows import require_hosted_windows
 
 
 def wait_for(probe, description, timeout=90):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        result = probe()
+        try:
+            result = probe()
+        except win32gui.error as exc:
+            # The wizard can be busy extracting files, and the controls or
+            # tray windows enumerated on a previous page can disappear.
+            if exc.winerror not in (1400, 1460):
+                raise
+            result = None
         if result:
             return result
         time.sleep(.2)
@@ -68,7 +74,7 @@ def click_control(hwnd):
     x, y = win32gui.ScreenToClient(hwnd, point)
     xy = win32api.MAKELONG(x, y)
     win32gui.SendMessageTimeout(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, xy, 2, 2000)
-    win32gui.SendMessageTimeout(hwnd, win32con.WM_LBUTTONUP, 0, xy, 2, 2000)
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, xy)
 
 
 def drive_wizard(setup, log, report):

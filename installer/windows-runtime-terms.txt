@@ -1,0 +1,21 @@
+﻿E Voice — дополнительные условия для компонентов Microsoft в Windows
+
+Устанавливая E Voice, вы соглашаетесь соблюдать следующие условия в отношении Microsoft Distributable Code. Этот код включает две библиотеки Visual C++ Runtime из комплекта Microsoft Visual Studio 2022 и код Microsoft, включённый при компоновке официальной сборки Python для Windows.
+
+Используйте эти компоненты только на платформах Microsoft. Сохраняйте их в неизменном виде со всеми уведомлениями об авторском праве, товарных знаках и патентах. При передаче в составе программы требуйте от дальнейших распространителей и конечных пользователей принять такие же защитные условия. Для самостоятельного распространения соблюдайте применимые условия Microsoft, включая права на передачу Distributable Code. Не используйте знаки Microsoft для указания на её авторство или одобрение программы. Запрещено включать компоненты в незаконные, вредоносные или вводящие в заблуждение программы. Эти условия распространяются исключительно на код Microsoft Distributable Code.
+
+E Voice — supplemental terms for Microsoft components on Windows
+
+By installing E Voice you agree to these conditions for Microsoft Distributable Code, including the two Visual C++ runtime libraries from the Visual Studio 2022 redistributable list and Microsoft code linked into the official Windows build of Python.
+
+Use these components on Microsoft platforms only. Keep them unmodified and preserve copyright, trademark and patent notices. When redistributing them as part of the application, require distributors and external end users to agree to equivalent protective terms. Further distribution is subject to the applicable Microsoft terms, including rights to distribute the Distributable Code. Do not use Microsoft trademarks to suggest authorship or endorsement. Do not distribute the components in unlawful, malicious or deceptive programs. These conditions apply solely to the Microsoft Distributable Code.
+
+Microsoft REDIST list and licensing
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+https://visualstudio.microsoft.com/license-terms/
+
+Additional conditions for the official Windows build of Python
+https://github.com/python/cpython/blob/v3.14.10/PC/crtlicense.txt
+
+E Voice and the GigaAM model each have their own MIT license. Other components retain their own licenses, including the LGPL rights to replace and debug the corresponding libraries. See LICENSE, models/gigaam-v3/LICENSE, THIRD_PARTY.md and licenses/.

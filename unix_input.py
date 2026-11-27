@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+from tkinter import TclError
 
 
 def shortcut_expression(label):
@@ -30,6 +31,7 @@ class DesktopInput:
         self.root, self.events = root, events
         self.wayland = sys.platform == 'linux' and bool(os.getenv('WAYLAND_DISPLAY') or os.getenv('XDG_SESSION_TYPE') == 'wayland')
         self.keys = self.mouse = self.display = None
+        self._pending_clipboard = None
         self.own_windows = set()
         self.note = ''
         if self.wayland:
@@ -81,14 +83,14 @@ class DesktopInput:
     def paste(self, text, target):
         if self.wayland or not target or self.target()[0] != target:
             return False
-        saved = self._read_clipboard()
         if sys.platform == 'darwin':
             from ApplicationServices import AXIsProcessTrusted
             import Quartz as q
             if not AXIsProcessTrusted():
                 return False
+        self._publish_for_paste(text)
+        if sys.platform == 'darwin':
             # Post one paste chord after publishing the UTF-8 result to the macOS pasteboard.
-            self.copy(text)
             for down in (True, False):
                 event = q.CGEventCreateKeyboardEvent(None, 9, down)
                 q.CGEventSetFlags(event, q.kCGEventFlagMaskCommand)
@@ -96,13 +98,10 @@ class DesktopInput:
         else:
             from Xlib import X, XK
             from Xlib.ext import xtest
-            self.copy(text)
             ctrl, v = [self.display.keysym_to_keycode(XK.string_to_keysym(k)) for k in ('Control_L', 'v')]
             for kind, key in ((X.KeyPress, ctrl), (X.KeyPress, v), (X.KeyRelease, v), (X.KeyRelease, ctrl)):
                 xtest.fake_input(self.display, kind, key)
             self.display.sync()
-        if saved is not None:
-            self._restore_clipboard(saved)
         return True
 
     def _read_clipboard(self):
@@ -111,18 +110,41 @@ class DesktopInput:
         except Exception:
             return None
 
-    def _restore_clipboard(self, saved):
-        # The synthesized paste chord is asynchronous in the target app; hand the
-        # user's previous clipboard back after it has had a moment to land.
+    def _clipboard_stamp(self):
+        try:
+            if sys.platform == 'darwin':
+                from AppKit import NSPasteboard
+                return NSPasteboard.generalPasteboard().changeCount()
+            owner = self.display.get_selection_owner(self.display.intern_atom('CLIPBOARD'))
+            return getattr(owner, 'id', None)
+        except Exception:
+            return None
+
+    def _publish_for_paste(self, text):
+        saved = self._read_clipboard()
+        pending = self._pending_clipboard
+        if pending and pending[0] == self._clipboard_stamp() and saved == pending[1]:
+            saved = pending[2]  # Two quick dictations share the original clipboard.
+        self.copy(text)
+        stamp = self._clipboard_stamp()
+        if saved is None or stamp is None:
+            return
+        pending = self._pending_clipboard = (stamp, text, saved)
+
         def restore():
-            try:
-                self.root.clipboard_clear()
-                self.root.clipboard_append(saved)
-            except Exception:
-                pass
+            if self._pending_clipboard is not pending:
+                return
+            self._pending_clipboard = None
+            if self._clipboard_stamp() == stamp and self._read_clipboard() == text:
+                try:
+                    self.copy(saved)
+                except TclError:
+                    pass  # The desktop or Tk window may be closing.
+
         self.root.after(600, restore)
 
     def copy(self, text):
+        self._pending_clipboard = None
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self.root.update_idletasks()
@@ -172,6 +194,7 @@ class DesktopInput:
             self.mouse.start()
 
     def close(self):
+        self._pending_clipboard = None
         for listener in (self.keys, self.mouse):
             if listener:
                 listener.stop()

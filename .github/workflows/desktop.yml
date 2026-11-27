@@ -4,6 +4,11 @@ on:
     branches: [main, release-check]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish this version after native and redistribution checks
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -36,6 +41,9 @@ jobs:
         with: {python-version: '3.14.10'}
       - if: runner.os == 'Linux'
         run: |
+          for suite in jammy jammy-updates jammy-security jammy-backports; do
+            printf 'deb-src [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu %s main restricted universe multiverse\n' "$suite"
+          done | sudo tee /etc/apt/sources.list.d/evoice-sources.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y libportaudio2 libasound2-dev python3-tk xvfb xauth openbox
       - run: python -m pip install -r requirements.lock.txt
@@ -48,12 +56,24 @@ jobs:
           python build_release.py --iscc $compiler.FullName
       - if: runner.os != 'Windows'
         run: python build_release.py
+      - name: Preserve corresponding Ubuntu sources for the packages just built
+        if: runner.os == 'Linux'
+        run: python tools/source_companion.py --ubuntu-inventory dist/EVoice/_internal/licenses/system/packages.tsv build/ubuntu-sources
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ubuntu-sources-${{ matrix.asset }}
+          path: build/ubuntu-sources/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
       - shell: bash
         run: python tools/checksums.py dist
       - if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo dpkg -i dist/*.deb
+          python tools/check_distribution.py
           sudo unshare --net /opt/e-voice/EVoice --transcribe tests/fixtures/russian-example.wav --output build/qa-offline.json
           xvfb-run -a bash -ec 'openbox >/tmp/evoice-wm.log 2>&1 & python tools/check_install.py /opt/e-voice/EVoice; python tools/check_x11.py'
           export HOME="$RUNNER_TEMP/E Voice user"
@@ -66,11 +86,14 @@ jobs:
         run: |
           sh installer/install.sh --from dist
           sandbox-exec -p '(version 1)(allow default)(deny network*)' "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice" --transcribe tests/fixtures/russian-example.wav --output build/qa-offline.json
+          python tools/check_distribution.py
           python tools/check_install.py "$HOME/Applications/E Voice.app/Contents/MacOS/EVoice"
       - name: Install Windows package
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\installer\install.ps1 -FromDirectory dist -LogPath "$PWD\build\windows-qa\setup.log"
+        run: |
+          .\installer\install.ps1 -FromDirectory dist -AcceptRuntimeTerms -LogPath "$PWD\build\windows-qa\setup.log"
+          python tools/check_distribution.py
       - name: Check installed Windows offline and shutdown lifecycle
         if: runner.os == 'Windows'
         shell: pwsh
@@ -98,6 +121,12 @@ jobs:
             build/windows-qa/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
+          name: notices-${{ matrix.asset }}
+          retention-days: 7
+          if-no-files-found: error
+          path: build/platform-notices.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
           name: packages-${{ matrix.asset }}
           compression-level: 0
           retention-days: 7
@@ -109,13 +138,13 @@ jobs:
             dist/E-Voice-Setup-x64.exe
   release:
     needs: [lint, native, windows-arm-compatibility]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/heads/release/'))
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with: {persist-credentials: false}
+        with: {persist-credentials: false, fetch-depth: 0}
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with: {python-version: '3.14.10'}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -124,12 +153,33 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python build_release.py --collect-artifacts package --release-directory release --release-tag "$RELEASE_TAG"
+        run: |
+          version=$(cat VERSION)
+          if [[ "$GITHUB_REF_TYPE" == branch ]]; then
+            [[ "$GITHUB_REF_NAME" == "release/$version" ]]
+            main=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+            git merge-base --is-ancestor "$main" "$GITHUB_SHA"
+            RELEASE_TAG="v$version"
+          fi
+          python build_release.py --collect-artifacts package --release-directory release --release-tag "$RELEASE_TAG"
+      - name: Assemble matching sources and notices from the build artifacts
+        run: |
+          python tools/source_companion.py package release
+          python tools/checksums.py release
       - env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
-        run: gh release create "$RELEASE_TAG" release/* --verify-tag --title "$RELEASE_TAG" --generate-notes
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == branch ]]; then
+            RELEASE_TAG="v$(cat VERSION)"
+            existing=$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG")
+            [[ -z "$existing" ]]
+            target=(--target "$GITHUB_SHA")
+          else
+            target=(--verify-tag)
+          fi
+          gh release create "$RELEASE_TAG" release/* "${target[@]}" --title "E Voice $RELEASE_TAG" --notes-file release-notes.md
   windows-arm-compatibility:
     needs: native
     runs-on: windows-11-arm
@@ -146,7 +196,7 @@ jobs:
           $report = @{ passed = $false }
           try {
             $setupLog = "$PWD\build\windows-qa\setup-arm64.log"
-            $setup = Start-Process -PassThru 'package/E-Voice-Setup-x64.exe' -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$setupLog`""
+            $setup = Start-Process -PassThru 'package/E-Voice-Setup-x64.exe' -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ACCEPTRUNTIMETERMS=1 /LOG=`"$setupLog`""
             if (-not $setup.WaitForExit(180000)) { Stop-Process -Id $setup.Id -Force; throw 'ARM installer timed out.' }
             if ($setup.ExitCode) { throw "ARM installer exited with code $($setup.ExitCode)" }
             $exe = "$env:LOCALAPPDATA\Programs\E Voice\EVoice.exe"

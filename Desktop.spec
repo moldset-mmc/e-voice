@@ -27,6 +27,12 @@ else:
     excludes += ['pynput.mouse._xorg', 'pynput.keyboard._xorg', 'Xlib']
 a = Analysis(['desktop_launcher.py'], binaries=binaries, datas=datas, hiddenimports=hidden, excludes=excludes,
              module_collection_mode={'pynput': 'py', 'Xlib': 'py'})
+def native_audio(entry):
+    path = entry[0].replace('\\', '/').lower()
+    return '_sounddevice_data/portaudio-binaries/' not in path or (mac and path.endswith('/libportaudio.dylib'))
+
+a.binaries = list(filter(native_audio, a.binaries))
+a.datas = list(filter(native_audio, a.datas))
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='EVoice', console=not mac, upx=False)
 coll = COLLECT(exe, a.binaries, a.datas, name='EVoice', upx=False)

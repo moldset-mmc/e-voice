@@ -27,6 +27,7 @@ class ReleaseAssemblyTests(unittest.TestCase):
                 (folder / name).write_bytes(name.encode('ascii'))
             self.report(asset, 'qa-offline.json', {'text': f'похвала {asset}'})
             self.report(asset, 'qa-interaction.json', {'passed': True, 'platform': asset})
+            self.report(asset, 'qa-licenses.json', {'passed': True})
         self.report('Windows-x64', 'qa-windows-lifecycle.json', {'passed': True})
         self.report('Windows-arm64', 'qa-arm64.json', {'passed': True})
 

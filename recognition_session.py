@@ -1,5 +1,6 @@
 """Keep model allocations outside the UI and release them between dictation sessions."""
 import multiprocessing as mp
+import queue
 import threading
 import time
 
@@ -39,6 +40,7 @@ class RecognitionSession:
         self.model_directory = model_directory
         self.process = self.connection = None
         self._close_lock = threading.Lock()
+        self._request_lock = threading.Lock()
         self._teardown_pending = False
 
     def warm(self):
@@ -58,32 +60,48 @@ class RecognitionSession:
         self.connection, self.process = local, process
 
     def transcribe(self, audio, test_file=None, rate=16000, timeout=None):
-        """Transcribe with a bounded wait so the UI can never hang forever.
-
-        The recognizer runs in a separate process; if it stops answering
-        (a rare deadlock on unusual hardware), the caller is released after
-        ``timeout`` seconds and the process is killed so the next session
-        respawns cleanly.
-        """
-        connection = self.connection
-        if test_file:
-            connection.send(('file', str(test_file)))
-        else:
-            connection.send(('audio', rate))
-            connection.send_bytes(audio)
+        """Budget one deadline for the whole IPC exchange, including a full pipe."""
         if timeout is None:
             timeout = self._default_timeout(audio, test_file, rate)
         deadline = time.monotonic() + timeout
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                self._abort()
-                raise RuntimeError('Распознавание не ответило вовремя. Попробуйте ещё раз.')
-            if connection.poll(remaining):
-                ok, result = connection.recv()
-                if not ok:
-                    raise RuntimeError(result)
-                return result
+        if not self._request_lock.acquire(blocking=False):
+            raise RuntimeError('Распознавание уже выполняется.')
+        try:
+            connection = self.connection
+            if connection is None:
+                raise RuntimeError('Процесс распознавания закрыт.')
+            reply = queue.Queue(maxsize=1)
+
+            def exchange():
+                try:
+                    if test_file:
+                        connection.send(('file', str(test_file)))
+                    else:
+                        connection.send(('audio', rate))
+                        connection.send_bytes(audio)
+                    response = connection.recv()
+                except Exception as error:
+                    response = (False, error)
+                reply.put((time.monotonic(), response))
+
+            # Terminating the peer on timeout releases a blocked pipe write or read.
+            # The worker holds only this request's pipe and private result queue.
+            threading.Thread(target=exchange, name='EVoice-IPC', daemon=True).start()
+            try:
+                completed, (ok, result) = reply.get(timeout=max(0, deadline - time.monotonic()))
+                if completed > deadline:
+                    raise queue.Empty
+            except queue.Empty:
+                self.close(expected_connection=connection)
+                raise RuntimeError('Распознавание не ответило вовремя. Попробуйте ещё раз.') from None
+            if isinstance(result, Exception):
+                self.close(expected_connection=connection)
+                raise result
+            if not ok:
+                raise RuntimeError(result)
+            return result
+        finally:
+            self._request_lock.release()
 
     @staticmethod
     def _default_timeout(audio, test_file, rate):
@@ -98,10 +116,12 @@ class RecognitionSession:
     def _abort(self):
         self.close()
 
-    def close(self):
+    def close(self, expected_connection=None):
         # Timeout recovery and GUI exit can race. Serialize only teardown, never
         # transcription's pipe wait, so each native handle is closed just once.
         with self._close_lock:
+            if expected_connection is not None and self.connection is not expected_connection:
+                return
             self._teardown_pending = True
             connection, process = self.connection, self.process
             self.connection = None

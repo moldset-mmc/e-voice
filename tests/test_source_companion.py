@@ -2,6 +2,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -100,3 +101,13 @@ class SourceCompanionTests(unittest.TestCase):
         self.assertEqual(calls, ['example=1:1.0-1', 'update', 'example=1:1.0-1'])
         package = destination / source_companion.ubuntu_source_path('example', '1:1.0-1')
         self.assertTrue((package / 'example.dsc').is_file())
+
+    def test_historical_lookup_retries_a_network_timeout(self):
+        entries = [{'pocket': 'Updates', 'component_name': 'main', 'date_published': '2024-04-01T00:00:00Z',
+                    'date_superseded': '2024-05-01T00:00:00Z', 'date_removed': None}]
+        response = BytesIO(json.dumps({'entries': entries}).encode())
+        with patch.object(source_companion, 'urlopen', side_effect=[TimeoutError(), response]) as get, \
+                patch.object(source_companion.time, 'sleep'):
+            snapshots = list(source_companion.ubuntu_snapshots('example', '1:1.0-1'))
+        self.assertEqual(snapshots, [('20240416T000000Z', 'jammy-updates', 'main')])
+        self.assertEqual(get.call_count, 2)

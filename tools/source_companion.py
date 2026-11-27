@@ -95,8 +95,15 @@ def ubuntu_snapshots(source, version):
     suites = {'Release': UBUNTU_SERIES, 'Updates': f'{UBUNTU_SERIES}-updates',
               'Security': f'{UBUNTU_SERIES}-security', 'Backports': f'{UBUNTU_SERIES}-backports'}
     while url:
-        with urlopen(url, timeout=30) as reply:
-            records = json.load(reply)
+        for attempt in range(3):
+            try:
+                with urlopen(url, timeout=30) as reply:
+                    records = json.load(reply)
+                break
+            except OSError:
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
         for entry in records['entries']:
             suite = suites.get(entry['pocket'])
             component = entry['component_name']

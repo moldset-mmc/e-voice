@@ -52,7 +52,7 @@ Source: "..\dist\EVoice\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\E Voice"; Filename: "{app}\EVoice.exe"
-Name: "{userdesktop}\E Voice"; Filename: "{app}\EVoice.exe"
+Name: "{userdesktop}\E Voice"; Filename: "{app}\EVoice.exe"; Parameters: "--show-settings"
 
 [Run]
 Filename: "{app}\EVoice.exe"; Flags: nowait skipifsilent

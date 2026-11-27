@@ -156,6 +156,12 @@ def stop_instance(pid):
         handle.Close()
 
 
+def wait_for_settings(pid):
+    wait_for(lambda: any(win32process.GetWindowThreadProcessId(h)[1] == pid and
+                         win32gui.IsWindowVisible(h) and win32gui.GetWindowText(h) == 'Настройки · E Voice'
+                         for h in windows()), 'The desktop shortcut did not show the settings window')
+
+
 def check(setup, arch, output):
     require_hosted_windows()
     process_machine, native_machine = ctypes.c_ushort(), ctypes.c_ushort()
@@ -178,16 +184,16 @@ def check(setup, arch, output):
         first = wait_for(lambda: tray_process(exe), 'Setup did not launch the installed tray application')
         report['automatic_tray_launch'] = True
         link = Dispatch('WScript.Shell').CreateShortcut(str(shortcut))
-        if not shortcut.is_file() or Path(link.TargetPath) != exe or link.Arguments:
+        if not shortcut.is_file() or Path(link.TargetPath) != exe or link.Arguments != '--show-settings':
             raise RuntimeError('Incorrect Desktop shortcut')
         os.startfile(shortcut)
-        wait_for(lambda: any(win32process.GetWindowThreadProcessId(h)[1] == first and
-                             win32gui.IsWindowVisible(h) and win32gui.GetWindowText(h) == 'Настройки · E Voice'
-                             for h in windows()), 'The shortcut did not show settings in the running instance')
+        wait_for_settings(first)
         report['shortcut_opens_settings'] = True
         stop_instance(first)
         os.startfile(shortcut)
         second = wait_for(lambda: tray_process(exe), 'Cold launch from Desktop shortcut failed')
+        wait_for_settings(second)
+        report['cold_launch_opens_settings'] = True
         report['shortcut_cold_launch'] = True
         stop_instance(second)
         report['passed'] = True

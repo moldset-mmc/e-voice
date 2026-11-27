@@ -706,6 +706,7 @@ class Application:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--show-settings', action='store_true', help='Open the settings window at startup')
     parser.add_argument('--transcribe', type=Path, help='Offline WAV test; no microphone and no paste')
     parser.add_argument('--test-audio', type=Path, help='Integration test: hotkey uses a WAV instead of microphone')
     parser.add_argument('--smoke-test', type=Path, help='Verify packaged GUI and model, write a JSON result, then exit')
@@ -794,6 +795,8 @@ def main():
     root.withdraw()
     try:
         application = Application(root, args.test_audio, bool(args.ui_demo or args.interaction_test))
+        if args.show_settings:
+            root.after_idle(application.show_settings)
         if args.ui_demo:
             application.autopaste.set(False)
             application.save_settings = lambda: None

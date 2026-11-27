@@ -1,0 +1,127 @@
+name: Verify existing macOS 1.1.5 installers
+on:
+  push:
+    branches: [qa/macos-1.1.5-first-launch]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  install-and-open:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            sha: 68da1f4c8b1a0bbad2a7aa1bacee3b08e6b0444f9f56dd33f121359fafb433e4
+          - runner: macos-15-intel
+            arch: x86_64
+            sha: 6f17e88e2c796b42fc7fe92313a2428c32f0c53e3cc307b1255e7b83b70de451
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    env:
+      ARCH: ${{ matrix.arch }}
+      EXPECTED: ${{ matrix.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ba91ea496cd068d53680bf18674a207a7b4bda00
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          run-id: 45996530022
+          github-token: ${{ github.token }}
+          name: packages-macOS-${{ matrix.arch }}
+          path: packages
+      - name: Check artifact, hardware and trust policy
+        shell: bash
+        run: |
+          pkg="packages/E-Voice-macOS-$ARCH.pkg"
+          printf '%s  %s\n' "$EXPECTED" "$pkg" | shasum -a 256 -c -
+          sw_vers
+          uname -m
+          test "$(uname -m)" = "$ARCH"
+          system_profiler SPHardwareDataType | grep -E 'Model Name|Model Identifier|Chip:|Processor Name:'
+          pkgutil --check-signature "$pkg" || echo "pkgutil status $?"
+          spctl --status || true
+          cp "$pkg" "$RUNNER_TEMP/Downloaded.pkg"
+          xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" "$RUNNER_TEMP/Downloaded.pkg"
+          spctl --assess --type install --verbose=4 "$RUNNER_TEMP/Downloaded.pkg" || echo "Gatekeeper status $?"
+      - name: Inspect the installation footprint in a fresh account
+        shell: bash
+        run: |
+          pkg="packages/E-Voice-macOS-$ARCH.pkg"
+          app="$HOME/Applications/E Voice.app"
+          test ! -e "$app"
+          pkgutil --expand "$pkg" "$RUNNER_TEMP/expanded"
+          bom=$(find "$RUNNER_TEMP/expanded" -name Bom -type f)
+          test -f "$bom"
+          test -z "$(find "$RUNNER_TEMP/expanded" -name Scripts)"
+          lsbom -s "$bom" > "$RUNNER_TEMP/files.txt"
+          test -s "$RUNNER_TEMP/files.txt"
+          awk '$0 != "." && $0 != "./" && $0 !~ /^(\.\/)?E Voice\.app(\/|$)/ {print; bad=1} END {exit bad}' "$RUNNER_TEMP/files.txt"
+          function user_items() {
+            if [[ -d "$HOME/Desktop" ]]; then ls -1A "$HOME/Desktop" | LC_ALL=C sort; fi
+            defaults read com.apple.dock persistent-apps 2>/dev/null | grep -i 'e.voice' || true
+            ls -1A "$HOME/Library/LaunchAgents" 2>/dev/null | grep -i 'e.voice' || true
+          }
+          user_items > "$RUNNER_TEMP/before.txt"
+          /usr/sbin/installer -pkg "$pkg" -target CurrentUserHomeDirectory
+          test -x "$app/Contents/MacOS/EVoice"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = 1.1.5
+          user_items > "$RUNNER_TEMP/after.txt"
+          diff -u "$RUNNER_TEMP/before.txt" "$RUNNER_TEMP/after.txt"
+          if pgrep -x EVoice; then echo 'Installer unexpectedly launched E Voice'; exit 1; fi
+          echo "Installed in ~/Applications without starting E Voice or adding Desktop/Dock items"
+          codesign -dvv "$app" 2>&1 | grep -E 'Identifier|Signature|TeamIdentifier' || true
+          codesign --verify --deep --strict --verbose=2 "$app" || echo "Bundle signature verification status $?"
+      - name: Open through Launch Services and verify the visible control and event loop
+        shell: bash
+        run: |
+          app="$HOME/Applications/E Voice.app"
+          cat > "$RUNNER_TEMP/windows.swift" <<'SWIFT'
+          import AppKit
+          import CoreGraphics
+          import Foundation
+          let path = URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL.resolvingSymlinksInPath()
+          let deadline = Date().addingTimeInterval(50)
+          while Date() < deadline {
+              let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.moldset-mmc.evoice")
+              for app in apps where app.bundleURL?.standardizedFileURL.resolvingSymlinksInPath() == path {
+                  let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+                  for window in list where (window[kCGWindowOwnerPID as String] as? Int) == Int(app.processIdentifier) {
+                      guard let rect = window[kCGWindowBounds as String] as? [String: Any],
+                            let w = rect["Width"] as? Double, let h = rect["Height"] as? Double, w >= 70, h >= 35 else { continue }
+                      print("Visible application window pid=\(app.processIdentifier) width=\(w) height=\(h)")
+                      exit(0)
+                  }
+              }
+              Thread.sleep(forTimeInterval: 0.5)
+          }
+          fputs("No visible window for the installed bundle\n", stderr)
+          exit(1)
+          SWIFT
+          xcrun swiftc "$RUNNER_TEMP/windows.swift" -o "$RUNNER_TEMP/check-window"
+          open "$app"
+          "$RUNNER_TEMP/check-window" "$app"
+          request="$HOME/Library/Application Support/E Voice/show.request"
+          test -f "$(dirname "$request")/instance.lock"
+          touch "$request"
+          for i in {1..40}; do [[ ! -e "$request" ]] && break; sleep 0.25; done
+          test ! -e "$request"
+          "$RUNNER_TEMP/check-window" "$app"
+          echo "Normal launch is visible and processes UI events"
+      - name: Recognize the fixture with the installed application offline
+        shell: bash
+        run: |
+          app="$HOME/Applications/E Voice.app"
+          sandbox-exec -p '(version 1)(allow default)(deny network*)' "$app/Contents/MacOS/EVoice" --transcribe tests/fixtures/russian-example.wav --output "$RUNNER_TEMP/speech.json"
+          python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['text']; assert len(s)>100 and 'похвал' in s.casefold(); print('Offline speech passed:',len(s),'characters')" "$RUNNER_TEMP/speech.json"
+      - name: Diagnose first-launch errors
+        if: failure()
+        shell: bash
+        run: |
+          ps -axo pid,comm | grep -i 'E Voice' || true
+          log show --last 3m --style compact --predicate 'process == "EVoice"' 2>/dev/null | tail -60 || true
+          find "$HOME/Library/Logs/DiagnosticReports" -iname 'EVoice*' -exec head -c 3500 '{}' \; 2>/dev/null || true
+

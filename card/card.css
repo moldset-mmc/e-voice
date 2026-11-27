@@ -63,6 +63,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .row-link small{color:var(--muted);overflow-wrap:anywhere}
 .row-link.stack span{display:block}.row-link.stack small{display:block}
 .actions .secondary{justify-content:center;border:1px solid var(--line);border-radius:12px}
+.channel-link{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;color:var(--accent);font-size:14px;text-align:center;text-decoration:none}
+.channel-link:hover{text-decoration:underline}
+.channel-link .icon:last-child{width:14px;height:14px}
 .enhanced .js-fallback{display:none}
 .dialog{border:0;border-radius:18px;background:#eff7f8;color:#142e38;padding:23px;max-width:min(360px,calc(100% - 28px));text-align:center;box-shadow:0 15px 42px #0005}
 .dialog::backdrop{background:rgba(4,10,17,.75);backdrop-filter:blur(4px)}
